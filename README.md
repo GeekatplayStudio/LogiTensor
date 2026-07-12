@@ -1,6 +1,6 @@
-# Geekatplay Studio: LogiBoard
+# Geekatplay Studio: LogiTensor
 
-**LogiBoard turns "if this then that" into something you can see, drag, and watch run.** Snap together math, AI calls, loops, and conditions like circuit components — no code required. Every workflow lives in its own *dimension*, dimensions stack into a 3D-navigable *hub*, and hubs link into a *federation* of workflows sharing live data across your entire universe of logic. Prototype an automation, teach computational thinking, or build a genuinely alive-feeling control system — LogiBoard makes the invisible plumbing of software visible, and fun to build.
+**LogiTensor turns "if this then that" into something you can see, drag, and watch run.** Snap together math, AI calls, loops, and conditions like circuit components — no code required. Every workflow lives in its own *dimension*, dimensions stack into a 3D-navigable *hub*, and hubs link into a *federation* of workflows sharing live data across your entire universe of logic — genuinely multi-dimensional, the way an AI model's tensors are, not just a flat board or a stack of them. Prototype an automation, teach computational thinking, or build a genuinely alive-feeling control system — LogiTensor makes the invisible plumbing of software visible, and fun to build.
 
 Branded and developed by **Geekatplay Studio**.
 
@@ -53,7 +53,7 @@ Branded and developed by **Geekatplay Studio**.
 
 ### 7. In-App Help & About
 - A **Help** panel (top toolbar) walks through building flows, the node library, dimensions, the 3D stack, and federation.
-- An **About** panel carries the LogiBoard pitch and Geekatplay Studio background, plus a link back to this repository.
+- An **About** panel carries the LogiTensor pitch and Geekatplay Studio background, plus a link back to this repository.
 
 ---
 

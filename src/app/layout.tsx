@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LogiBoard - Geekatplay Studio",
-  description: "Visual node logic engine and execution flow editor.",
+  title: "LogiTensor - Geekatplay Studio",
+  description: "Visual, multi-dimensional node logic engine and execution flow editor.",
 };
 
 export const viewport = {

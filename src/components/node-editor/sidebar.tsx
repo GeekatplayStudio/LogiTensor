@@ -41,16 +41,11 @@ export default function Sidebar() {
 
   return (
     <aside className="w-72 bg-zinc-950 border-r border-zinc-900 flex flex-col h-full z-10 select-none">
-      {/* Sidebar Header / Brand */}
-      <div className="p-4 border-b border-zinc-900 flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded bg-amber-500 flex items-center justify-center font-bold text-zinc-950 text-xs shadow-[0_0_12px_rgba(245,158,11,0.5)]">
-            G
-          </div>
-          <span className="font-extrabold text-sm uppercase tracking-wider text-zinc-100">
-            Geekatplay Node
-          </span>
-        </div>
+      {/* Sidebar Header */}
+      <div className="p-4 border-b border-zinc-900 flex flex-col gap-1">
+        <span className="font-extrabold text-sm uppercase tracking-wider text-zinc-100">
+          Node Library
+        </span>
         <p className="text-[10px] text-zinc-500 leading-tight">
           Visual programming interface. Drag elements to compose algorithms.
         </p>

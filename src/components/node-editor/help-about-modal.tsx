@@ -19,7 +19,7 @@ const TAGLINE =
   "Wire logic like circuits, watch it run live, and scale it from a single flow into a federation of connected workflows.";
 
 const SALES_BLURB =
-  "LogiBoard is a visual logic engine that turns \"if this then that\" into something you can actually see, drag, and watch execute in real time. Snap together math, AI calls, loops, and conditions like circuit components — no code required. Every workflow lives in its own \"dimension,\" dimensions stack into a 3D-navigable hub, and hubs link into a federation of workflows that can share live data across your entire universe of logic. Whether you're prototyping an automation, teaching computational thinking, or building a genuinely alive-feeling control system, LogiBoard makes the invisible plumbing of software visible — and fun to build.";
+  "LogiTensor is a visual logic engine that turns \"if this then that\" into something you can actually see, drag, and watch execute in real time. Snap together math, AI calls, loops, and conditions like circuit components — no code required. Every workflow lives in its own \"dimension,\" dimensions stack into a 3D-navigable hub, and hubs link into a federation of workflows that can share live data across your entire universe of logic — genuinely multi-dimensional, the way an AI model's tensors are, not just a flat board or a stack of them. Whether you're prototyping an automation, teaching computational thinking, or building a genuinely alive-feeling control system, LogiTensor makes the invisible plumbing of software visible — and fun to build.";
 
 export default function HelpAboutModal({
   tab,
@@ -177,7 +177,7 @@ function AboutContent() {
         </div>
         <div>
           <div className="font-black text-base uppercase tracking-wider bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
-            LogiBoard
+            LogiTensor
           </div>
           <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
             by Geekatplay Studio
@@ -191,7 +191,7 @@ function AboutContent() {
         <p>
           <b className="text-zinc-200">Geekatplay Studio</b> builds playful, boundary-pushing creative
           tools — where interactive experiments, generative systems, and hands-on visual programming
-          meet. LogiBoard carries that spirit into logic and automation: a canvas-first, execution-first
+          meet. LogiTensor carries that spirit into logic and automation: a canvas-first, execution-first
           way to build systems that stay understandable no matter how large they grow.
         </p>
         <p className="text-zinc-500">
@@ -201,12 +201,12 @@ function AboutContent() {
       </div>
 
       <a
-        href="https://github.com/GeekatplayStudio/LogiBoard"
+        href="https://github.com/GeekatplayStudio/LogiTensor"
         target="_blank"
         rel="noreferrer"
         className="mt-5 inline-flex items-center gap-1.5 text-[11px] font-semibold text-zinc-400 hover:text-amber-400 transition"
       >
-        <GitBranch size={13} /> github.com/GeekatplayStudio/LogiBoard
+        <GitBranch size={13} /> github.com/GeekatplayStudio/LogiTensor
       </a>
     </div>
   );

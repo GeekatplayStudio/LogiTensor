@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from typing import List, Any, Dict
 from backend.execution_engine import compile_and_run_graph
 
-app = FastAPI(title="LogiBoard LangGraph Backend")
+app = FastAPI(title="LogiTensor LangGraph Backend")
 
 # Enable CORS for Next.js frontend calls
 app.add_middleware(

@@ -12,7 +12,7 @@ export function serializeAndSave(nodes: Node<NodeData>[], edges: Edge[]) {
   
   const a = document.createElement("a");
   a.href = url;
-  a.download = `logiboard_algorithm_${Date.now()}.json`;
+  a.download = `logitensor_algorithm_${Date.now()}.json`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

@@ -109,7 +109,7 @@ export default function Home() {
               Geekatplay Studio
             </span>
             <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest leading-none mt-0.5">
-              LogiBoard Visual Editor
+              LogiTensor Visual Editor
             </span>
           </div>
         </div>
@@ -224,7 +224,7 @@ export default function Home() {
             size="sm"
             onClick={() => setHelpTab("help")}
             className="h-8 gap-1.5 px-2.5 bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
-            title="How LogiBoard works"
+            title="How LogiTensor works"
           >
             <HelpCircle className="w-3.5 h-3.5" />
             <span className="text-xs uppercase font-medium">Help</span>
@@ -235,7 +235,7 @@ export default function Home() {
             size="sm"
             onClick={() => setHelpTab("about")}
             className="h-8 gap-1.5 px-2.5 bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
-            title="About LogiBoard"
+            title="About LogiTensor"
           >
             <Info className="w-3.5 h-3.5" />
             <span className="text-xs uppercase font-medium">About</span>
