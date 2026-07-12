@@ -1,8 +1,9 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNodeEditorStore } from "./use-node-editor-store";
 import { generateWeights } from "@/lib/execution-helpers";
 import { Label } from "@/components/ui/label";
-import { Upload } from "lucide-react";
+import { Upload, Maximize2 } from "lucide-react";
+import DenseLayer3DView, { LayerPlane } from "./dense-layer-3d-view";
 
 // Visual bodies for the AI Model node group (Image Input Grid, Dense Layer,
 // Output Layer). Split out of custom-nodes.tsx to keep that file under the
@@ -150,7 +151,90 @@ export function ImageGridBody({
 // caption still reports the real totals.
 const MAX_DOTS = 10;
 
+const CHAINABLE_TYPES = new Set(["imageInputGrid", "denseLayer", "outputLayerNode"]);
+
+// Walks the wired AI Model chain (Image Grid → Dense → Dense → … → Output)
+// both backward and forward from whichever node was double-clicked, so the 3D
+// view always shows the WHOLE network, not just the one layer you opened it from.
+function buildChainNodeIds(startId: string, nodes: any[], edges: any[]): string[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const ids = [startId];
+
+  let cur = startId;
+  while (true) {
+    const edge = edges.find((e) => e.target === cur && e.targetHandle === "in");
+    if (!edge) break;
+    const src = byId.get(edge.source);
+    if (!src || !CHAINABLE_TYPES.has(src.type)) break;
+    ids.unshift(src.id);
+    if (src.type === "imageInputGrid") break; // nothing feeds an image grid
+    cur = src.id;
+  }
+
+  cur = startId;
+  while (true) {
+    const edge = edges.find((e) => e.source === cur && (e.sourceHandle === "out" || e.sourceHandle === "values"));
+    if (!edge) break;
+    const tgt = byId.get(edge.target);
+    if (!tgt || !CHAINABLE_TYPES.has(tgt.type)) break;
+    ids.push(tgt.id);
+    if (tgt.type === "outputLayerNode") break; // terminal — just relays values
+    cur = tgt.id;
+  }
+
+  return ids;
+}
+
+// Turns a chain of node ids into the LayerPlane[] the 3D viewer renders:
+// each Dense Layer's real weight matrix generated against the PRECEDING
+// plane's actual size, so multi-hop chains (like a classic MLP diagram) get
+// their own correct weights per hop, not just the single layer clicked.
+function buildLayerPlanes(ids: string[], nodes: any[]): LayerPlane[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const planes: LayerPlane[] = [];
+  let prevLen = 0;
+
+  for (const id of ids) {
+    const n = byId.get(id);
+    if (!n) continue;
+
+    if (n.type === "imageInputGrid") {
+      const values: number[] = Array.isArray(n.data.outputs?.find((o: any) => o.id === "values")?.value)
+        ? n.data.outputs.find((o: any) => o.id === "values").value
+        : [];
+      planes.push({ label: n.data.label || "Image Grid", values });
+      prevLen = values.length;
+    } else if (n.type === "denseLayer") {
+      const neurons = Math.max(1, Math.min(64, Math.floor(Number(n.data.config?.neurons ?? 8) || 1)));
+      const seed = Math.floor(Number(n.data.config?.seed ?? 42) || 0);
+      const activations: number[] = Array.isArray(n.data.outputs?.find((o: any) => o.id === "out")?.value)
+        ? n.data.outputs.find((o: any) => o.id === "out").value
+        : [];
+      const weights = prevLen > 0 ? generateWeights(seed, prevLen, neurons) : undefined;
+      planes.push({ label: n.data.label || "Dense Layer", values: activations, weights });
+      prevLen = activations.length;
+    } else if (n.type === "outputLayerNode") {
+      const values: number[] = Array.isArray(n.data.outputs?.find((o: any) => o.id === "out")?.value)
+        ? n.data.outputs.find((o: any) => o.id === "out").value
+        : [];
+      const winnerVal = n.data.outputs?.find((o: any) => o.id === "winner")?.value;
+      planes.push({
+        label: n.data.label || "Output",
+        values,
+        winner: typeof winnerVal === "number" ? winnerVal : undefined,
+      });
+      prevLen = values.length;
+    }
+  }
+
+  return planes;
+}
+
 export function DenseLayerBody({ id, data }: { id: string; data: any }) {
+  const [show3D, setShow3D] = useState(false);
+  const nodes = useNodeEditorStore((s) => s.nodes);
+  const edges = useNodeEditorStore((s) => s.edges);
+
   // Resolve the live incoming vector from whatever is wired into "in".
   const incoming = useNodeEditorStore((s) => {
     const edge = s.edges.find((e) => e.target === id && e.targetHandle === "in");
@@ -158,6 +242,11 @@ export function DenseLayerBody({ id, data }: { id: string; data: any }) {
     const src = s.nodes.find((n) => n.id === edge.source);
     return src?.data.outputs.find((o) => o.id === edge.sourceHandle)?.value;
   });
+
+  const chainLayers = useMemo(() => {
+    if (!show3D) return [];
+    return buildLayerPlanes(buildChainNodeIds(id, nodes, edges), nodes);
+  }, [show3D, id, nodes, edges]);
 
   const xs: number[] = Array.isArray(incoming) ? incoming.map(Number) : [];
   const neurons = Math.max(1, Math.min(64, Math.floor(Number(data.config?.neurons ?? 8) || 1)));
@@ -167,10 +256,13 @@ export function DenseLayerBody({ id, data }: { id: string; data: any }) {
   )
     ? data.outputs.find((o: any) => o.id === "out").value
     : [];
+  const winner = activations.length
+    ? activations.reduce((best, v, j) => (v > activations[best] ? j : best), 0)
+    : -1;
 
   const shownIn = Math.min(xs.length, MAX_DOTS);
   const shownOut = Math.min(neurons, MAX_DOTS);
-  const weights = shownIn > 0 ? generateWeights(seed, xs.length, neurons) : [];
+  const weights = xs.length > 0 ? generateWeights(seed, xs.length, neurons) : [];
 
   const H = Math.max(shownIn, shownOut, 1) * 18 + 8;
   const yIn = (i: number) => 12 + i * ((H - 24) / Math.max(shownIn - 1, 1));
@@ -179,6 +271,11 @@ export function DenseLayerBody({ id, data }: { id: string; data: any }) {
   return (
     <div className="px-3.5 pb-2.5 space-y-1">
       {shownIn > 0 ? (
+        <div
+          className="relative group/web nodrag cursor-zoom-in"
+          onDoubleClick={() => setShow3D(true)}
+          title="Double-click to view the full weight web in 3D"
+        >
         <svg width="100%" viewBox={`0 0 190 ${H}`} className="bg-zinc-950/60 rounded border border-zinc-900">
           {/* weight web: one line per (shown) input × neuron pair */}
           {Array.from({ length: shownIn }).map((_, i) =>
@@ -215,6 +312,12 @@ export function DenseLayerBody({ id, data }: { id: string; data: any }) {
             );
           })}
         </svg>
+        <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover/web:bg-black/40 opacity-0 group-hover/web:opacity-100 transition rounded pointer-events-none">
+          <div className="flex items-center gap-1 text-[9px] font-semibold text-zinc-200 bg-zinc-900/80 border border-zinc-700 rounded px-2 py-1">
+            <Maximize2 size={10} /> View in 3D
+          </div>
+        </div>
+        </div>
       ) : (
         <div className="h-14 rounded border border-dashed border-zinc-800 flex items-center justify-center text-[10px] text-zinc-600">
           Wire values in to grow the web
@@ -222,19 +325,32 @@ export function DenseLayerBody({ id, data }: { id: string; data: any }) {
       )}
       <p className="text-[9px] text-zinc-600 leading-tight">
         {xs.length} inputs × {neurons} neurons = {xs.length * neurons} weights
-        {xs.length > MAX_DOTS || neurons > MAX_DOTS ? ` (showing ${shownIn}×${shownOut})` : ""}
+        {xs.length > MAX_DOTS || neurons > MAX_DOTS ? ` (showing ${shownIn}×${shownOut} — double-click to see all in 3D)` : ""}
       </p>
+
+      {show3D && chainLayers.length > 0 && (
+        <DenseLayer3DView layers={chainLayers} onClose={() => setShow3D(false)} />
+      )}
     </div>
   );
 }
 
 export function OutputLayerBody({ id, data }: { id: string; data: any }) {
+  const [show3D, setShow3D] = useState(false);
+  const nodes = useNodeEditorStore((s) => s.nodes);
+  const edges = useNodeEditorStore((s) => s.edges);
+
   const incoming = useNodeEditorStore((s) => {
     const edge = s.edges.find((e) => e.target === id && e.targetHandle === "in");
     if (!edge) return undefined;
     const src = s.nodes.find((n) => n.id === edge.source);
     return src?.data.outputs.find((o) => o.id === edge.sourceHandle)?.value;
   });
+
+  const chainLayers = useMemo(() => {
+    if (!show3D) return [];
+    return buildLayerPlanes(buildChainNodeIds(id, nodes, edges), nodes);
+  }, [show3D, id, nodes, edges]);
 
   const xs: number[] = Array.isArray(incoming) ? incoming.map(Number) : [];
   const winner = data.outputs?.find((o: any) => o.id === "winner")?.value ?? -1;
@@ -244,7 +360,11 @@ export function OutputLayerBody({ id, data }: { id: string; data: any }) {
   return (
     <div className="px-3.5 pb-2.5 space-y-1">
       {shown.length > 0 ? (
-        <div className="space-y-0.5 bg-zinc-950/60 rounded border border-zinc-900 p-1.5">
+        <div
+          className="space-y-0.5 bg-zinc-950/60 rounded border border-zinc-900 p-1.5 nodrag cursor-zoom-in"
+          onDoubleClick={() => setShow3D(true)}
+          title="Double-click to view the whole network in 3D"
+        >
           {shown.map((v, i) => (
             <div key={i} className="flex items-center gap-1.5">
               <span className={`w-4 text-right font-mono text-[8px] ${i === winner ? "text-[#D8B98A] font-bold" : "text-zinc-600"}`}>
@@ -275,6 +395,10 @@ export function OutputLayerBody({ id, data }: { id: string; data: any }) {
         <p className="text-[9px] text-zinc-500">
           Winner: neuron <span className="font-mono font-bold text-[#D8B98A]">{winner}</span>
         </p>
+      )}
+
+      {show3D && chainLayers.length > 0 && (
+        <DenseLayer3DView layers={chainLayers} onClose={() => setShow3D(false)} />
       )}
     </div>
   );
