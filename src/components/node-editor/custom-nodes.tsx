@@ -132,14 +132,14 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
 
   const isMultiDim = !!data.config?.isMultiDimensional;
   const isFederated = !!data.config?.isFederated;
-  const multiDimBorder = isMultiDim
-    ? "border-[#7FAAB0] shadow-[0_0_12px_rgba(127,170,176,0.2)] bg-gradient-to-b from-[#7FAAB0]/10 to-zinc-950/95"
-    : `${categoryStyles.border} ${categoryStyles.accent}`;
+  const bodyBorder = isMultiDim
+    ? "border-[#7FAAB0] shadow-[0_0_12px_rgba(127,170,176,0.2)]"
+    : categoryStyles.border;
   const federatedGlow = isFederated ? "shadow-[0_0_12px_rgba(173,139,176,0.22)]" : "";
 
   return (
     <div
-      className={`min-w-[220px] max-w-[320px] ${shapeClasses} border text-zinc-200 transition-all duration-300 hover:shadow-zinc-900/50 ${multiDimBorder} ${federatedGlow} ${executionStyles}`}
+      className={`min-w-[220px] max-w-[320px] ${shapeClasses} border bg-zinc-900 text-zinc-200 transition-all duration-300 hover:shadow-zinc-900/50 ${bodyBorder} ${federatedGlow} ${executionStyles}`}
     >
       {/* Node Header */}
       <div
@@ -147,7 +147,7 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
       >
         <div className="flex items-center gap-2">
           <div className={`w-1.5 h-1.5 rounded-full ${categoryStyles.accent}`} />
-          <span className="font-semibold text-xs tracking-wide uppercase">
+          <span className="font-semibold text-xs tracking-wide uppercase text-zinc-50">
             {data.label}
           </span>
         </div>

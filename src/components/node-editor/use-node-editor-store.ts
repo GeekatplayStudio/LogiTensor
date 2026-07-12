@@ -28,6 +28,29 @@ const formatEdgeValue = (val: any): string => {
   return str.length > 15 ? str.substring(0, 12) + "..." : str;
 };
 
+// Connectors stay dim/neutral until something has actually flowed through
+// them, then "light up" with their real color and a glow — so at a glance
+// you can see which wires are live versus just wired-but-idle.
+const EDGE_IDLE_STROKE = "#52525b";
+
+function litEdgeStyle(color: string, strokeWidth: number) {
+  return {
+    stroke: color,
+    strokeWidth,
+    opacity: 1,
+    filter: `drop-shadow(0 0 4px ${color}99)`,
+  };
+}
+
+function idleEdgeStyle(strokeWidth: number) {
+  return {
+    stroke: EDGE_IDLE_STROKE,
+    strokeWidth,
+    opacity: 0.55,
+    filter: undefined,
+  };
+}
+
 // Combines the same input port's value collected across every dimension instance
 // of a multi-dimensional node: numbers sum, booleans OR, strings join — otherwise
 // the first defined value wins. This is the "process as multiple inputs" rule.
@@ -626,15 +649,13 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
       }
 
       const isTrigger = sourcePort.type === "trigger";
-      const edgeColor = getPortColor(sourcePort.type, sourcePort.dataType);
 
+      // New connections start dim/idle — they only "light up" once a value
+      // or trigger has actually flowed through them.
       const connectionWithStyle = {
         ...connection,
-        style: {
-          stroke: edgeColor,
-          strokeWidth: isTrigger ? 2.5 : 2,
-        },
-        animated: isTrigger,
+        style: idleEdgeStyle(isTrigger ? 2.5 : 2),
+        animated: false,
       };
 
       const newEdges = addEdge(connectionWithStyle, filteredEdges);
@@ -858,6 +879,21 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
       }));
     }
 
+    // Light up outgoing data edges to reflect the value that just flowed —
+    // dim again if the node errored or that specific output has no value.
+    set((state) => ({
+      edges: state.edges.map((e) => {
+        if (e.source !== nodeId) return e;
+        const sourcePort = node.data.outputs.find((o) => o.id === e.sourceHandle);
+        if (!sourcePort || sourcePort.type !== "data") return e;
+        const hasValue = executionState !== "error" && outputs[e.sourceHandle ?? ""] !== undefined;
+        return {
+          ...e,
+          style: hasValue ? litEdgeStyle(getPortColor("data", sourcePort.dataType), 2) : idleEdgeStyle(2),
+        };
+      }),
+    }));
+
     // Propagate to downstream data nodes within the active layer
     const downstreamEdges = edges.filter((e) => e.source === nodeId);
     for (const edge of downstreamEdges) {
@@ -883,7 +919,8 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
     const targetNode = nodes.find((n) => n.id === targetNodeId);
     if (!targetNode) return;
 
-    // 1. Indicate the node is processing/running
+    // 1. Indicate the node is processing/running, and light up the trigger
+    // wire carrying this signal so you can see execution travel through it.
     set((state) => ({
       nodes: state.nodes.map((n) =>
         n.id === targetNodeId
@@ -892,6 +929,11 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
               data: { ...n.data, executionState: "running" as const },
             }
           : n
+      ),
+      edges: state.edges.map((e) =>
+        e.id === triggerEdge.id
+          ? { ...e, animated: true, style: litEdgeStyle(getPortColor("trigger"), 2.5) }
+          : e
       ),
     }));
 
@@ -1010,7 +1052,8 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
       errorMsg = err.message || "Execution flow error";
     }
 
-    // 3. Mark execution status
+    // 3. Mark execution status; settle the trigger wire into lit (success)
+    // or dim (error) rather than leaving it mid-animation.
     set((state) => ({
       nodes: state.nodes.map((n) =>
         n.id === targetNodeId
@@ -1024,6 +1067,18 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
               },
             }
           : n
+      ),
+      edges: state.edges.map((e) =>
+        e.id === triggerEdge.id
+          ? {
+              ...e,
+              animated: status === "success",
+              style:
+                status === "success"
+                  ? litEdgeStyle(getPortColor("trigger"), 2.5)
+                  : idleEdgeStyle(2.5),
+            }
+          : e
       ),
     }));
 
@@ -1132,30 +1187,23 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
                 if (!sourceNode || sourceNode.data.executionState !== "success") {
                   return {
                     ...edge,
+                    animated: false,
                     label: undefined,
-                    style: {
-                      ...edge.style,
-                      strokeWidth: 2,
-                      opacity: 0.25,
-                    },
+                    style: idleEdgeStyle(2),
                   };
                 }
 
-                const isTrigger = edge.sourceHandle?.endsWith("Trigger") || 
-                                  edge.sourceHandle === "triggerOut" || 
-                                  edge.sourceHandle === "outTrigger" || 
-                                  edge.sourceHandle === "onTrue" || 
+                const isTrigger = edge.sourceHandle?.endsWith("Trigger") ||
+                                  edge.sourceHandle === "triggerOut" ||
+                                  edge.sourceHandle === "outTrigger" ||
+                                  edge.sourceHandle === "onTrue" ||
                                   edge.sourceHandle === "onFalse";
 
                 if (isTrigger) {
                   return {
                     ...edge,
                     animated: true,
-                    style: {
-                      stroke: getPortColor("trigger"),
-                      strokeWidth: 3,
-                      opacity: 1.0,
-                    },
+                    style: litEdgeStyle(getPortColor("trigger"), 3),
                   };
                 }
 
@@ -1168,11 +1216,7 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
                   label: val !== undefined ? formatEdgeValue(val) : undefined,
                   labelBgStyle: { fill: "#18181b", stroke: "#27272a", fillOpacity: 0.95, rx: 4 },
                   labelStyle: { fill: portColor, fontSize: 9, fontFamily: "Outfit", fontWeight: "bold" },
-                  style: {
-                    stroke: portColor,
-                    strokeWidth: 3,
-                    opacity: 1.0,
-                  },
+                  style: litEdgeStyle(portColor, 3),
                 };
               });
             };
@@ -1275,6 +1319,11 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
           errorMessage: undefined,
           // If it is a logger, we can clear the logs or preserve them. Let's preserve but reset status.
         },
+      })),
+      edges: state.edges.map((e) => ({
+        ...e,
+        animated: false,
+        style: idleEdgeStyle((e.style as any)?.strokeWidth ?? 2),
       })),
     }));
   },

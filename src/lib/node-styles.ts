@@ -29,42 +29,47 @@ export const getPortColor = (type: "trigger" | "data", dataType?: string) => {
 
 /**
  * Returns Tailwind css maps for visual categories.
+ *
+ * Nodes themselves stay a neutral gray (readability) — only the header band
+ * carries the category color, darkened so white node names stay legible.
+ * `accent` is a small solid dot for the category indicator only; it must
+ * never be applied as a background fill on the whole node.
  */
 export const getCategoryStyles = (category: string, selected: boolean) => {
   const styles: Record<string, { headerBg: string; border: string; accent: string }> = {
     Inputs: {
-      headerBg: "bg-[#7C93B5]/10 text-[#A9BAD3] border-[#7C93B5]/25",
-      border: selected ? "border-[#7C93B5] shadow-[0_0_12px_rgba(124,147,181,0.25)]" : "border-[#7C93B5]/15",
+      headerBg: "bg-[#7C93B5]/35 text-zinc-50 border-[#7C93B5]/40",
+      border: selected ? "border-[#7C93B5] shadow-[0_0_12px_rgba(124,147,181,0.3)]" : "border-zinc-700",
       accent: "bg-[#7C93B5]",
     },
     Logic: {
-      headerBg: "bg-[#6FA69C]/10 text-[#A0C7BF] border-[#6FA69C]/25",
-      border: selected ? "border-[#6FA69C] shadow-[0_0_12px_rgba(111,166,156,0.25)]" : "border-[#6FA69C]/15",
+      headerBg: "bg-[#6FA69C]/35 text-zinc-50 border-[#6FA69C]/40",
+      border: selected ? "border-[#6FA69C] shadow-[0_0_12px_rgba(111,166,156,0.3)]" : "border-zinc-700",
       accent: "bg-[#6FA69C]",
     },
     "Control Flow": {
-      headerBg: "bg-[#9285AD]/10 text-[#BCB2CE] border-[#9285AD]/25",
-      border: selected ? "border-[#9285AD] shadow-[0_0_12px_rgba(146,133,173,0.25)]" : "border-[#9285AD]/15",
+      headerBg: "bg-[#9285AD]/35 text-zinc-50 border-[#9285AD]/40",
+      border: selected ? "border-[#9285AD] shadow-[0_0_12px_rgba(146,133,173,0.3)]" : "border-zinc-700",
       accent: "bg-[#9285AD]",
     },
     "Math & Compare": {
-      headerBg: "bg-[#B99B72]/10 text-[#D3BE9C] border-[#B99B72]/25",
-      border: selected ? "border-[#B99B72] shadow-[0_0_12px_rgba(185,155,114,0.25)]" : "border-[#B99B72]/15",
+      headerBg: "bg-[#B99B72]/35 text-zinc-50 border-[#B99B72]/40",
+      border: selected ? "border-[#B99B72] shadow-[0_0_12px_rgba(185,155,114,0.3)]" : "border-zinc-700",
       accent: "bg-[#B99B72]",
     },
     "Data & Text": {
-      headerBg: "bg-[#6FA98A]/10 text-[#A2C9B3] border-[#6FA98A]/25",
-      border: selected ? "border-[#6FA98A] shadow-[0_0_12px_rgba(111,169,138,0.25)]" : "border-[#6FA98A]/15",
+      headerBg: "bg-[#6FA98A]/35 text-zinc-50 border-[#6FA98A]/40",
+      border: selected ? "border-[#6FA98A] shadow-[0_0_12px_rgba(111,169,138,0.3)]" : "border-zinc-700",
       accent: "bg-[#6FA98A]",
     },
     Outputs: {
-      headerBg: "bg-[#AD8288]/10 text-[#CBAEB2] border-[#AD8288]/25",
-      border: selected ? "border-[#AD8288] shadow-[0_0_12px_rgba(173,130,136,0.25)]" : "border-[#AD8288]/15",
+      headerBg: "bg-[#AD8288]/35 text-zinc-50 border-[#AD8288]/40",
+      border: selected ? "border-[#AD8288] shadow-[0_0_12px_rgba(173,130,136,0.3)]" : "border-zinc-700",
       accent: "bg-[#AD8288]",
     },
     "AI & Scripts": {
-      headerBg: "bg-[#9483AD]/10 text-[#BDB0CE] border-[#9483AD]/25",
-      border: selected ? "border-[#9483AD] shadow-[0_0_12px_rgba(148,131,173,0.25)]" : "border-[#9483AD]/15",
+      headerBg: "bg-[#9483AD]/35 text-zinc-50 border-[#9483AD]/40",
+      border: selected ? "border-[#9483AD] shadow-[0_0_12px_rgba(148,131,173,0.3)]" : "border-zinc-700",
       accent: "bg-[#9483AD]",
     },
   };
@@ -72,14 +77,16 @@ export const getCategoryStyles = (category: string, selected: boolean) => {
 };
 
 /**
- * Returns glow and outline styling based on node execution status.
+ * Returns glow and outline styling based on node execution status — a clearly
+ * visible glowing ring while running, and one that lingers after success/error
+ * so it's obvious which nodes actually ran during the last execution.
  */
 export const getExecutionStyles = (state: string = "idle") => {
   const styles: Record<string, string> = {
     idle: "",
-    running: "ring-1 ring-[#B99B72] shadow-[0_0_14px_rgba(185,155,114,0.35)] animate-pulse",
-    success: "ring-1 ring-[#6FA98A] shadow-[0_0_14px_rgba(111,169,138,0.3)] transition-all duration-300",
-    error: "ring-1 ring-[#B57676] shadow-[0_0_14px_rgba(181,118,118,0.35)]",
+    running: "ring-2 ring-[#D8B98A] shadow-[0_0_22px_rgba(216,185,138,0.55)] animate-pulse",
+    success: "ring-2 ring-[#8FCBA8] shadow-[0_0_18px_rgba(143,203,168,0.45)] transition-all duration-300",
+    error: "ring-2 ring-[#D68F8F] shadow-[0_0_18px_rgba(214,143,143,0.5)]",
   };
   return styles[state] || "";
 };

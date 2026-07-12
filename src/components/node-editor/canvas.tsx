@@ -90,7 +90,7 @@ function FlowCanvas() {
         connectionLineType={ConnectionLineType.Bezier}
         connectionLineStyle={connectionLineStyle}
         defaultEdgeOptions={{
-          style: { stroke: "#3f3f46", strokeWidth: 2 },
+          style: { stroke: "#52525b", strokeWidth: 2, opacity: 0.55 },
           animated: false,
         }}
         fitView
