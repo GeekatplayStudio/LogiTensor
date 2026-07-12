@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { NODE_DEFINITIONS } from "@/types/nodes";
 import { useNodeEditorStore } from "./use-node-editor-store";
 import { useReactFlow } from "@xyflow/react";
-import { HelpCircle, Layers, Cpu, CornerDownRight, X, BarChart, Settings, Brain } from "lucide-react";
+import { HelpCircle, Layers, Cpu, CornerDownRight, X, BarChart, Settings, Brain, Filter } from "lucide-react";
 
 interface RadialMenuProps {
   x: number;
@@ -19,13 +19,14 @@ export default function RadialMenu({ x, y, onClose, isOpen }: RadialMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Group definitions
-  const categories = ["Inputs", "Logic", "Control Flow", "Math & Compare", "Outputs", "AI & Scripts"];
-  
+  const categories = ["Inputs", "Logic", "Control Flow", "Math & Compare", "Data & Text", "Outputs", "AI & Scripts"];
+
   const categoryIcons: Record<string, React.ReactNode> = {
     Inputs: <Layers size={14} />,
     Logic: <Cpu size={14} />,
     "Control Flow": <CornerDownRight size={14} />,
     "Math & Compare": <BarChart size={14} />,
+    "Data & Text": <Filter size={14} />,
     Outputs: <Settings size={14} />,
     "AI & Scripts": <Brain size={14} />,
   };
@@ -54,6 +55,12 @@ export default function RadialMenu({ x, y, onClose, isOpen }: RadialMenuProps) {
       text: "text-amber-300",
       border: "border-amber-700/60",
       glow: "shadow-[0_0_12px_rgba(245,158,11,0.5)]",
+    },
+    "Data & Text": {
+      bg: "bg-emerald-950/90 hover:bg-emerald-900/90",
+      text: "text-emerald-300",
+      border: "border-emerald-700/60",
+      glow: "shadow-[0_0_12px_rgba(16,185,129,0.5)]",
     },
     Outputs: {
       bg: "bg-rose-950/90 hover:bg-rose-900/90",

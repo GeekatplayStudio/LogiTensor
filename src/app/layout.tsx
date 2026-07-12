@@ -19,6 +19,12 @@ export const metadata: Metadata = {
   description: "Visual node logic engine and execution flow editor.",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -27,9 +33,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full w-full antialiased dark`}
     >
-      <body className="min-h-full flex flex-col bg-zinc-950 text-zinc-100 font-sans">
+      <body className="h-full w-full flex flex-col bg-zinc-950 text-zinc-100 font-sans overflow-hidden">
         <TooltipProvider>
           {children}
           <Toaster theme="dark" closeButton richColors />

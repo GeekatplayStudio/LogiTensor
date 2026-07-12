@@ -102,9 +102,10 @@ function FlowCanvas() {
           style={{ background: "#09090b", border: "1px solid #27272a" }}
           nodeColor={(n) => {
             if (["triggerInput", "constNum", "constBool", "constString"].includes(n.type || "")) return "#3b82f6";
-            if (["ifElseTrigger", "condValue", "delayNode", "counterNode"].includes(n.type || "")) return "#a855f7";
-            if (["compareNode", "expressionNode"].includes(n.type || "")) return "#f59e0b";
-            if (["loggerNode"].includes(n.type || "")) return "#f43f5e";
+            if (["ifElseTrigger", "condValue", "delayNode", "counterNode", "forLoopNode", "whileLoopNode"].includes(n.type || "")) return "#a855f7";
+            if (["compareNode", "expressionNode", "mathNode", "mathFunctionNode", "randomNode"].includes(n.type || "")) return "#f59e0b";
+            if (["filterNode", "stringOpNode", "replaceTextNode"].includes(n.type || "")) return "#10b981";
+            if (["loggerNode", "textOutputNode"].includes(n.type || "")) return "#f43f5e";
             return "#14b8a6";
           }}
           maskColor="rgba(9, 9, 11, 0.7)"

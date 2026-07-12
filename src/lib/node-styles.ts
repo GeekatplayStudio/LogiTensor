@@ -34,6 +34,11 @@ export const getCategoryStyles = (category: string, selected: boolean) => {
       border: selected ? "border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.3)]" : "border-amber-500/20",
       accent: "bg-amber-500",
     },
+    "Data & Text": {
+      headerBg: "bg-emerald-500/10 text-emerald-300 border-emerald-500/30",
+      border: selected ? "border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)]" : "border-emerald-500/20",
+      accent: "bg-emerald-500",
+    },
     Outputs: {
       headerBg: "bg-rose-500/10 text-rose-300 border-rose-500/30",
       border: selected ? "border-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.3)]" : "border-rose-500/20",

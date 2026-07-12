@@ -25,7 +25,7 @@ export interface NodeData extends Record<string, any> {
 export interface NodeDefinition {
   type: string;
   label: string;
-  category: "Inputs" | "Logic" | "Control Flow" | "Math & Compare" | "Outputs" | "AI & Scripts";
+  category: "Inputs" | "Logic" | "Control Flow" | "Math & Compare" | "Data & Text" | "Outputs" | "AI & Scripts";
   description: string;
   inputs: PortDefinition[];
   outputs: PortDefinition[];
@@ -189,6 +189,38 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
       { id: "value", name: "Value", type: "data", dataType: "number" },
     ],
   },
+  forLoopNode: {
+    type: "forLoopNode",
+    label: "For Loop",
+    category: "Control Flow",
+    description: "Fires the Body trigger Count times (index output counts up), then fires Done.",
+    inputs: [
+      { id: "inTrigger", name: "Run", type: "trigger" },
+      { id: "count", name: "Count", type: "data", dataType: "number", value: 3 },
+    ],
+    outputs: [
+      { id: "loopBody", name: "Body", type: "trigger" },
+      { id: "index", name: "Index", type: "data", dataType: "number" },
+      { id: "done", name: "Done", type: "trigger" },
+    ],
+    config: { index: 0 },
+  },
+  whileLoopNode: {
+    type: "whileLoopNode",
+    label: "While Loop",
+    category: "Control Flow",
+    description: "Fires the Body trigger while Condition stays true (max 1000 iterations), then fires Done.",
+    inputs: [
+      { id: "inTrigger", name: "Run", type: "trigger" },
+      { id: "condition", name: "Condition", type: "data", dataType: "any", value: "true" },
+    ],
+    outputs: [
+      { id: "loopBody", name: "Body", type: "trigger" },
+      { id: "iteration", name: "Iteration", type: "data", dataType: "number" },
+      { id: "done", name: "Done", type: "trigger" },
+    ],
+    config: { iteration: 0 },
+  },
   counterNode: {
     type: "counterNode",
     label: "Counter",
@@ -204,6 +236,30 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
   },
 
   // Math & Compare
+  mathNode: {
+    type: "mathNode",
+    label: "Formula",
+    category: "Math & Compare",
+    description: "Free-form formula over auto-growing lettered inputs (a, b, c…). Numbers compute, strings concatenate.",
+    inputs: [
+      { id: "a", name: "A", type: "data", dataType: "any", value: 1 },
+      { id: "b", name: "B", type: "data", dataType: "any", value: 1 },
+    ],
+    outputs: [{ id: "out", name: "Result", type: "data", dataType: "any" }],
+    config: { expression: "a + b", dynamicInputs: true },
+  },
+  mathFunctionNode: {
+    type: "mathFunctionNode",
+    label: "Math Function",
+    category: "Math & Compare",
+    description: "Applies a math function (abs, round, sqrt, pow, min, max, mod…) to its inputs.",
+    inputs: [
+      { id: "a", name: "A", type: "data", dataType: "number", value: 0 },
+      { id: "b", name: "B", type: "data", dataType: "number", value: 0 },
+    ],
+    outputs: [{ id: "out", name: "Result", type: "data", dataType: "number" }],
+    config: { op: "abs" }, // abs | round | floor | ceil | sqrt | pow | min | max | mod
+  },
   compareNode: {
     type: "compareNode",
     label: "Compare Values",
@@ -227,6 +283,44 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     ],
     outputs: [{ id: "out", name: "Result", type: "data", dataType: "any" }],
     config: { expression: "x * 2 + y" },
+  },
+
+  // Data & Text
+  filterNode: {
+    type: "filterNode",
+    label: "Filter",
+    category: "Data & Text",
+    description: "Passes the value through only when it includes (or excludes) the search text.",
+    inputs: [
+      { id: "value", name: "Value", type: "data", dataType: "any", value: "" },
+      { id: "search", name: "Search", type: "data", dataType: "string", value: "" },
+    ],
+    outputs: [
+      { id: "out", name: "Out", type: "data", dataType: "any" },
+      { id: "match", name: "Match", type: "data", dataType: "boolean" },
+    ],
+    config: { mode: "include", caseSensitive: false }, // include | exclude
+  },
+  stringOpNode: {
+    type: "stringOpNode",
+    label: "Text Transform",
+    category: "Data & Text",
+    description: "Transforms text: uppercase, lowercase, trim, length, or reverse.",
+    inputs: [{ id: "text", name: "Text", type: "data", dataType: "string", value: "" }],
+    outputs: [{ id: "out", name: "Out", type: "data", dataType: "any" }],
+    config: { op: "uppercase" }, // uppercase | lowercase | trim | length | reverse
+  },
+  replaceTextNode: {
+    type: "replaceTextNode",
+    label: "Text Replace",
+    category: "Data & Text",
+    description: "Replaces every occurrence of Find with Replace in the input text.",
+    inputs: [
+      { id: "text", name: "Text", type: "data", dataType: "string", value: "" },
+      { id: "find", name: "Find", type: "data", dataType: "string", value: "" },
+      { id: "replace", name: "Replace", type: "data", dataType: "string", value: "" },
+    ],
+    outputs: [{ id: "out", name: "Out", type: "data", dataType: "string" }],
   },
 
   // Outputs

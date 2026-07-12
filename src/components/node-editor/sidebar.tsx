@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { NODE_DEFINITIONS, NodeDefinition } from "@/types/nodes";
-import { Search, Plus } from "lucide-react";
+import { Search, Plus, ChevronDown } from "lucide-react";
 import { useNodeEditorStore } from "./use-node-editor-store";
 import { Input } from "@/components/ui/input";
 import { getCategoryStyles } from "@/lib/node-styles";
@@ -8,6 +8,10 @@ import { getCategoryStyles } from "@/lib/node-styles";
 export default function Sidebar() {
   const addNode = useNodeEditorStore((state) => state.addNode);
   const [search, setSearch] = useState("");
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
+  const toggleCollapsed = (cat: string) =>
+    setCollapsed((prev) => ({ ...prev, [cat]: !prev[cat] }));
 
   const onDragStart = (event: React.DragEvent, nodeType: string) => {
     event.dataTransfer.setData("application/reactflow", nodeType);
@@ -20,6 +24,7 @@ export default function Sidebar() {
     Logic: [],
     "Control Flow": [],
     "Math & Compare": [],
+    "Data & Text": [],
     Outputs: [],
     "AI & Scripts": [],
   };
@@ -74,11 +79,26 @@ export default function Sidebar() {
           const textAccent = styles.headerBg.split(" ").find((c) => c.startsWith("text-")) || "text-zinc-400";
           const borderAccent = styles.headerBg.split(" ").find((c) => c.startsWith("border-")) || "border-zinc-800";
 
+          // A live search overrides collapse so matches are always visible
+          const isCollapsed = search === "" && !!collapsed[catName];
+
           return (
             <div key={catName} className="space-y-2">
-              <span className={`text-[10px] font-bold tracking-widest uppercase block mb-1 ${textAccent}`}>
-                {catName}
-              </span>
+              <button
+                onClick={() => toggleCollapsed(catName)}
+                className={`w-full flex items-center justify-between text-[10px] font-bold tracking-widest uppercase mb-1 ${textAccent} hover:brightness-125 transition cursor-pointer`}
+                title={isCollapsed ? "Expand category" : "Collapse category"}
+              >
+                <span className="flex items-center gap-1.5">
+                  {catName}
+                  <span className="text-zinc-600 font-medium normal-case tracking-normal">({nodes.length})</span>
+                </span>
+                <ChevronDown
+                  size={12}
+                  className={`transition-transform duration-200 ${isCollapsed ? "-rotate-90" : ""}`}
+                />
+              </button>
+              {!isCollapsed && (
               <div className="grid grid-cols-1 gap-2">
                 {nodes.map((node) => (
                   <div
@@ -113,6 +133,7 @@ export default function Sidebar() {
                   </div>
                 ))}
               </div>
+              )}
             </div>
           );
         })}

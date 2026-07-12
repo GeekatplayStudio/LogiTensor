@@ -1,19 +1,13 @@
 import React, { memo } from "react";
 import { Handle, Position, NodeProps } from "@xyflow/react";
 import { useNodeEditorStore } from "./use-node-editor-store";
-import { Play, Trash2, AlertCircle } from "lucide-react";
+import { Play, Trash2, AlertCircle, Network } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { getPortColor, getCategoryStyles, getExecutionStyles } from "@/lib/node-styles";
+import NodeConfigPanel from "./node-config-panel";
 
 const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) => {
   const data = rawData as any;
@@ -24,16 +18,19 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
   const triggerNode = useNodeEditorStore((state) => state.triggerNode);
   const disconnectHandle = useNodeEditorStore((state) => state.disconnectHandle);
   const toggleNodeMultiDimensional = useNodeEditorStore((state) => state.toggleNodeMultiDimensional);
+  const toggleNodeFederated = useNodeEditorStore((state) => state.toggleNodeFederated);
 
   // Style categories
-  let category: "Inputs" | "Logic" | "Control Flow" | "Math & Compare" | "Outputs" | "AI & Scripts" = "Logic";
+  let category: "Inputs" | "Logic" | "Control Flow" | "Math & Compare" | "Data & Text" | "Outputs" | "AI & Scripts" = "Logic";
   if (["triggerInput", "constNum", "constBool", "constString"].includes(type || "")) {
     category = "Inputs";
-  } else if (["ifElseTrigger", "condValue", "delayNode", "counterNode"].includes(type || "")) {
+  } else if (["ifElseTrigger", "condValue", "delayNode", "counterNode", "forLoopNode", "whileLoopNode"].includes(type || "")) {
     category = "Control Flow";
-  } else if (["compareNode", "expressionNode"].includes(type || "")) {
+  } else if (["compareNode", "expressionNode", "mathNode", "mathFunctionNode", "randomNode"].includes(type || "")) {
     category = "Math & Compare";
-  } else if (["loggerNode"].includes(type || "")) {
+  } else if (["filterNode", "stringOpNode", "replaceTextNode"].includes(type || "")) {
+    category = "Data & Text";
+  } else if (["loggerNode", "textOutputNode"].includes(type || "")) {
     category = "Outputs";
   } else if (["pythonScript", "ollamaLLM", "ollamaVLM"].includes(type || "")) {
     category = "AI & Scripts";
@@ -134,13 +131,15 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
   }
 
   const isMultiDim = !!data.config?.isMultiDimensional;
-  const multiDimBorder = isMultiDim 
-    ? "border-cyan-400 shadow-[0_0_18px_rgba(34,211,238,0.25)] bg-gradient-to-b from-cyan-950/20 to-zinc-950/95" 
+  const isFederated = !!data.config?.isFederated;
+  const multiDimBorder = isMultiDim
+    ? "border-cyan-400 shadow-[0_0_18px_rgba(34,211,238,0.25)] bg-gradient-to-b from-cyan-950/20 to-zinc-950/95"
     : `${categoryStyles.border} ${categoryStyles.accent}`;
+  const federatedGlow = isFederated ? "shadow-[0_0_18px_rgba(217,70,239,0.3)]" : "";
 
   return (
     <div
-      className={`min-w-[220px] max-w-[320px] ${shapeClasses} border text-zinc-200 transition-all duration-300 hover:shadow-zinc-900/50 ${multiDimBorder} ${executionStyles}`}
+      className={`min-w-[220px] max-w-[320px] ${shapeClasses} border text-zinc-200 transition-all duration-300 hover:shadow-zinc-900/50 ${multiDimBorder} ${federatedGlow} ${executionStyles}`}
     >
       {/* Node Header */}
       <div
@@ -178,6 +177,23 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
               </svg>
             </button>
           )}
+          {type !== "triggerInput" && (
+            <button
+              onClick={() => toggleNodeFederated(id)}
+              className={`p-1 rounded hover:bg-zinc-800/80 transition active:scale-90 ${
+                isFederated
+                  ? "text-fuchsia-400 bg-fuchsia-950/30 hover:text-fuchsia-300"
+                  : "text-zinc-500 hover:text-zinc-300"
+              }`}
+              title={
+                isFederated
+                  ? "Federation Link Active (Connects this node across hubs)"
+                  : "Enable Federation Link (Connect this node to other hubs)"
+              }
+            >
+              <Network className={`w-3.5 h-3.5 ${isFederated ? "animate-pulse" : ""}`} />
+            </button>
+          )}
           {type === "triggerInput" && (
             <button
               onClick={handleManualTrigger}
@@ -198,173 +214,7 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
       </div>
 
       {/* Node Configuration / Custom Editors */}
-      <div className="p-3 border-b border-zinc-900 bg-zinc-900/10 space-y-2">
-        {type === "constNum" && (
-          <div className="space-y-1">
-            <Label className="text-[10px] text-zinc-400">Value</Label>
-            <Input
-              type="number"
-              value={data.config?.value ?? 0}
-              onChange={(e) => handleConfigChange("value", e.target.value === "" ? 0 : Number(e.target.value))}
-              className="h-7 text-xs bg-zinc-950 border-zinc-800 text-zinc-200"
-            />
-          </div>
-        )}
-
-        {type === "constBool" && (
-          <div className="flex items-center justify-between py-1">
-            <span className="text-[10px] text-zinc-400">Value</span>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-zinc-500">{data.config?.value ? "True" : "False"}</span>
-              <Switch
-                checked={!!data.config?.value}
-                onCheckedChange={(val) => handleConfigChange("value", val)}
-              />
-            </div>
-          </div>
-        )}
-
-        {type === "constString" && (
-          <div className="space-y-1">
-            <Label className="text-[10px] text-zinc-400">Value</Label>
-            <Input
-              type="text"
-              value={data.config?.value ?? ""}
-              onChange={(e) => handleConfigChange("value", e.target.value)}
-              className="h-7 text-xs bg-zinc-950 border-zinc-800 text-zinc-200"
-            />
-          </div>
-        )}
-
-        {type === "compareNode" && (
-          <div className="space-y-1">
-            <Label className="text-[10px] text-zinc-400">Comparison</Label>
-            <Select
-              value={data.config?.op ?? "=="}
-              onValueChange={(val) => handleConfigChange("op", val)}
-            >
-              <SelectTrigger className="h-7 text-xs bg-zinc-950 border-zinc-800">
-                <SelectValue placeholder="Select operator" />
-              </SelectTrigger>
-              <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-200">
-                <SelectItem value="==">== (Equal)</SelectItem>
-                <SelectItem value="!=">!= (Not Equal)</SelectItem>
-                <SelectItem value=">">&gt; (Greater)</SelectItem>
-                <SelectItem value=">=">&gt;= (Greater/Equal)</SelectItem>
-                <SelectItem value="<">&lt; (Less)</SelectItem>
-                <SelectItem value="<=">&lt;= (Less/Equal)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
-        {type === "expressionNode" && (
-          <div className="space-y-1">
-            <Label className="text-[10px] text-zinc-400">Expression (Safe JS)</Label>
-            <Input
-              type="text"
-              value={data.config?.expression ?? ""}
-              onChange={(e) => handleConfigChange("expression", e.target.value)}
-              className="h-7 text-xs bg-zinc-950 border-zinc-800 font-mono text-zinc-200"
-              placeholder="e.g. x * 2 + y"
-            />
-          </div>
-        )}
-
-        {type === "counterNode" && (
-          <div className="flex items-center justify-between py-1 bg-zinc-950/40 px-2 rounded border border-zinc-900/60">
-            <span className="text-[10px] text-zinc-400 font-medium">Current Count</span>
-            <span className="font-mono text-xs font-bold text-purple-400">
-              {data.config?.count ?? 0}
-            </span>
-          </div>
-        )}
-
-        {type === "loggerNode" && (
-          <div className="space-y-1">
-            <div className="flex justify-between items-center">
-              <Label className="text-[10px] text-zinc-400">Recent Logs</Label>
-              <button
-                onClick={() => handleConfigChange("logs", [])}
-                className="text-[9px] hover:text-red-400 text-zinc-500 transition"
-              >
-                Clear
-              </button>
-            </div>
-            <div className="max-h-20 overflow-y-auto bg-zinc-950 border border-zinc-900 rounded p-1.5 font-mono text-[9px] text-zinc-400 scrollbar-thin">
-              {data.config?.logs && data.config.logs.length > 0 ? (
-                data.config.logs.map((log: string, idx: number) => (
-                  <div key={idx} className="border-b border-zinc-900/40 py-0.5 leading-tight">
-                    {log}
-                  </div>
-                ))
-              ) : (
-                <div className="text-zinc-600 italic">No logs yet. Run trigger.</div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {type === "pythonScript" && (
-          <div className="space-y-1">
-            <Label className="text-[10px] text-zinc-400">Python Code</Label>
-            <Textarea
-              value={data.config?.code ?? ""}
-              onChange={(e) => handleConfigChange("code", e.target.value)}
-              className="h-28 text-[11px] font-mono bg-zinc-950 border-zinc-800 text-zinc-200 scrollbar-thin resize-none"
-              placeholder="# Write Python code here"
-            />
-          </div>
-        )}
-
-        {type === "ollamaLLM" && (
-          <div className="space-y-1.5">
-            <div className="flex justify-between items-center">
-              <Label className="text-[10px] text-zinc-400">Model</Label>
-              <Input
-                type="text"
-                value={data.config?.model ?? "llama3"}
-                onChange={(e) => handleConfigChange("model", e.target.value)}
-                className="h-6 w-24 text-[10px] bg-zinc-950 border-zinc-800 text-zinc-200 py-0.5 px-1"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[10px] text-zinc-400">System Prompt</Label>
-              <Input
-                type="text"
-                value={data.config?.systemPrompt ?? ""}
-                onChange={(e) => handleConfigChange("systemPrompt", e.target.value)}
-                className="h-7 text-xs bg-zinc-950 border-zinc-800 text-zinc-200"
-                placeholder="System instructions..."
-              />
-            </div>
-          </div>
-        )}
-
-        {type === "ollamaVLM" && (
-          <div className="space-y-1.5">
-            <div className="flex justify-between items-center">
-              <Label className="text-[10px] text-zinc-400">Vision Model</Label>
-              <Input
-                type="text"
-                value={data.config?.model ?? "llava"}
-                onChange={(e) => handleConfigChange("model", e.target.value)}
-                className="h-6 w-24 text-[10px] bg-zinc-950 border-zinc-800 text-zinc-200 py-0.5 px-1"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[10px] text-zinc-400">Image Source (URL / Path)</Label>
-              <Input
-                type="text"
-                value={data.config?.image ?? ""}
-                onChange={(e) => handleConfigChange("image", e.target.value)}
-                className="h-7 text-xs bg-zinc-950 border-zinc-800 text-zinc-200"
-                placeholder="Path or base64 data..."
-              />
-            </div>
-          </div>
-        )}
-      </div>
+      <NodeConfigPanel type={type} data={data} onConfigChange={handleConfigChange} />
 
       {/* Inputs and Outputs Ports */}
       <div className="grid grid-cols-2 gap-4 px-3.5 py-2.5 text-xs bg-zinc-950/20">
@@ -591,4 +441,11 @@ export const nodeTypes = {
   ollamaVLM: CustomNode,
   randomNode: CustomNode,
   textOutputNode: CustomNode,
+  mathNode: CustomNode,
+  mathFunctionNode: CustomNode,
+  filterNode: CustomNode,
+  stringOpNode: CustomNode,
+  replaceTextNode: CustomNode,
+  forLoopNode: CustomNode,
+  whileLoopNode: CustomNode,
 };

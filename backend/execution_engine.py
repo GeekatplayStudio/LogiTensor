@@ -25,8 +25,66 @@ ACTIVE_TYPES = {
     "ollamaVLM",
     "ifElseTrigger",
     "loggerNode",
-    "textOutputNode"
+    "textOutputNode",
+    "forLoopNode",
+    "whileLoopNode",
 }
+
+LOOP_TYPES = {"forLoopNode", "whileLoopNode"}
+
+
+def _is_trigger_handle(handle) -> bool:
+    return bool(handle) and (
+        str(handle).endswith("Trigger")
+        or handle in ("triggerOut", "outTrigger", "onTrue", "onFalse", "done", "loopBody")
+    )
+
+
+def _coerce_operand(v):
+    """Numeric-looking strings become numbers so formulas compute; other
+    values pass through so string logic (concatenation, comparison) works."""
+    if isinstance(v, str):
+        t = v.strip()
+        if t != "":
+            try:
+                return float(t) if ("." in t or "e" in t.lower()) else int(t)
+            except ValueError:
+                pass
+    return v
+
+
+def _condition_flag(cond_val, state) -> bool:
+    """Resolves a condition value (bool, truthy strings, or a safe expression
+    evaluated against all node outputs) to a boolean."""
+    if not isinstance(cond_val, str):
+        return bool(cond_val)
+    trimmed = cond_val.strip().lower()
+    if trimmed in ("true", "1", "yes"):
+        return True
+    if trimmed in ("false", "0", "no", ""):
+        return False
+    try:
+        context = {}
+        for source_nid, node_outs in state["outputs"].items():
+            for port_id, val in node_outs.items():
+                context[f"{source_nid}_{port_id}"] = val
+                if len(node_outs) == 1 or port_id in ("value", "out", "result", "response"):
+                    context[source_nid] = val
+        return bool(safe_evaluate(cond_val, context))
+    except Exception as e:
+        state["logs"].append(f"Condition expression evaluation failed: {str(e)}. Defaulting to False.")
+        return False
+
+
+def _clear_passive_cache(state) -> None:
+    """Drops cached outputs of passive (data) nodes so they re-evaluate with
+    fresh loop counters on the next resolve — active node outputs persist."""
+    passive_ids = [
+        nid for nid in list(state["outputs"].keys())
+        if state["nodes"].get(nid, {}).get("type") not in ACTIVE_TYPES
+    ]
+    for nid in passive_ids:
+        del state["outputs"][nid]
 
 def evaluate_passive_node(node_id: str, state: GraphState) -> Dict[str, Any]:
     """
@@ -149,6 +207,70 @@ def execute_logic_computation(node_type: str, inputs: Dict[str, Any], config: Di
         expr = config.get("expression", "x * 2 + y")
         # Run safe evaluation using our custom library
         outputs["out"] = safe_evaluate(expr, inputs)
+    elif node_type == "mathNode":
+        expr = config.get("expression", "a + b")
+        ctx = {k: _coerce_operand(v) for k, v in inputs.items()}
+        try:
+            outputs["out"] = safe_evaluate(expr, ctx)
+        except TypeError:
+            # Mixed string/number operands: fall back to string semantics
+            str_ctx = {k: ("" if v is None else str(v)) for k, v in inputs.items()}
+            outputs["out"] = safe_evaluate(expr, str_ctx)
+    elif node_type == "mathFunctionNode":
+        import math
+        try:
+            a = float(inputs.get("a", 0) or 0)
+            b = float(inputs.get("b", 0) or 0)
+        except (TypeError, ValueError):
+            a, b = 0.0, 0.0
+        op = config.get("op", "abs")
+        fns = {
+            "abs": lambda: abs(a),
+            "round": lambda: round(a),
+            "floor": lambda: math.floor(a),
+            "ceil": lambda: math.ceil(a),
+            "sqrt": lambda: math.sqrt(a) if a >= 0 else 0,
+            "pow": lambda: a ** b,
+            "min": lambda: min(a, b),
+            "max": lambda: max(a, b),
+            "mod": lambda: (a % b) if b != 0 else 0,
+        }
+        outputs["out"] = fns.get(op, fns["abs"])()
+    elif node_type == "filterNode":
+        val = inputs.get("value")
+        search = str(inputs.get("search", "") or "")
+        hay = str(val if val is not None else "")
+        if config.get("caseSensitive"):
+            found = search in hay
+        else:
+            found = search.lower() in hay.lower()
+        passed = found if config.get("mode", "include") == "include" else not found
+        outputs["match"] = passed
+        outputs["out"] = val if passed else None
+    elif node_type == "stringOpNode":
+        text = str(inputs.get("text", "") or "")
+        op = config.get("op", "uppercase")
+        if op == "uppercase":
+            outputs["out"] = text.upper()
+        elif op == "lowercase":
+            outputs["out"] = text.lower()
+        elif op == "trim":
+            outputs["out"] = text.strip()
+        elif op == "length":
+            outputs["out"] = len(text)
+        elif op == "reverse":
+            outputs["out"] = text[::-1]
+        else:
+            outputs["out"] = text
+    elif node_type == "replaceTextNode":
+        text = str(inputs.get("text", "") or "")
+        find = str(inputs.get("find", "") or "")
+        replace = str(inputs.get("replace", "") or "")
+        outputs["out"] = text if find == "" else text.replace(find, replace)
+    elif node_type == "forLoopNode":
+        outputs["index"] = int(config.get("index", 0) or 0)
+    elif node_type == "whileLoopNode":
+        outputs["iteration"] = int(config.get("iteration", 0) or 0)
     elif node_type == "randomNode":
         import random
         try:
@@ -274,6 +396,50 @@ async def run_node_task(node_id: str, state: GraphState) -> GraphState:
             outputs["outTrigger"] = None
             state["logs"].append(f"Text Output node '{node_id}' updated with: {val_to_display}")
             
+        # 6.7 For Loop: run the Body chain Count times, publishing the index
+        elif node_type == "forLoopNode":
+            try:
+                count = int(float(inputs.get("count", 3) or 0))
+            except (TypeError, ValueError):
+                count = 0
+            count = max(0, min(1000, count))
+            body_edge = next(
+                (e for e in state["edges"] if e.get("source") == node_id and e.get("sourceHandle") == "loopBody"),
+                None,
+            )
+            state["logs"].append(f"For Loop starting: {count} iterations.")
+            for i in range(count):
+                outputs["index"] = i
+                state["outputs"][node_id] = dict(outputs)
+                _clear_passive_cache(state)
+                if body_edge:
+                    await run_trigger_chain(body_edge["target"], state)
+            state["logs"].append(f"For Loop completed {count} iterations.")
+
+        # 6.8 While Loop: run the Body chain while Condition stays true
+        elif node_type == "whileLoopNode":
+            body_edge = next(
+                (e for e in state["edges"] if e.get("source") == node_id and e.get("sourceHandle") == "loopBody"),
+                None,
+            )
+            iteration = 0
+            while iteration < 1000:
+                outputs["iteration"] = iteration
+                state["outputs"][node_id] = dict(outputs)
+                # Re-evaluate the condition's upstream chain each pass — the
+                # body may have changed the values feeding it.
+                _clear_passive_cache(state)
+                cond_val = resolve_inputs(node_id, state).get("condition", False)
+                if not _condition_flag(cond_val, state):
+                    break
+                if body_edge:
+                    await run_trigger_chain(body_edge["target"], state)
+                iteration += 1
+            if iteration >= 1000:
+                state["logs"].append("While Loop stopped: 1000-iteration safety cap reached.")
+            else:
+                state["logs"].append(f"While Loop finished after {iteration} iterations.")
+
         # 7. Fallback standard calculations (AND, Compare, Constants, etc.)
         else:
             outputs = execute_logic_computation(node_type, inputs, config)
@@ -290,86 +456,160 @@ async def run_node_task(node_id: str, state: GraphState) -> GraphState:
     state["outputs"][node_id] = outputs
     return state
 
+
+async def run_trigger_chain(start_id: str, state: GraphState, max_steps: int = 5000) -> None:
+    """
+    Executes a trigger chain sequentially outside LangGraph — used for loop
+    bodies. Follows trigger edges node by node, honoring If/Else branching and
+    letting nested loops recurse through run_node_task.
+    """
+    current = start_id
+    steps = 0
+    while current and steps < max_steps:
+        steps += 1
+        node = state["nodes"].get(current)
+        if not node:
+            return
+        await run_node_task(current, state)
+        ntype = node.get("type")
+        if ntype == "ifElseTrigger":
+            cond_val = resolve_inputs(current, state).get("condition", False)
+            branch = "onTrue" if _condition_flag(cond_val, state) else "onFalse"
+            nxt = next(
+                (e for e in state["edges"] if e.get("source") == current and e.get("sourceHandle") == branch),
+                None,
+            )
+        elif ntype in LOOP_TYPES:
+            # The loop already ran its own body inside run_node_task —
+            # continue the chain from its Done port.
+            nxt = next(
+                (e for e in state["edges"] if e.get("source") == current and e.get("sourceHandle") == "done"),
+                None,
+            )
+        else:
+            nxt = next(
+                (
+                    e for e in state["edges"]
+                    if e.get("source") == current
+                    and _is_trigger_handle(e.get("sourceHandle"))
+                    and e.get("sourceHandle") != "loopBody"
+                ),
+                None,
+            )
+        current = nxt["target"] if nxt else None
+
+
 async def compile_and_run_graph(nodes_json: List[Any], edges_json: List[Any]) -> Dict[str, Any]:
     """
     Compiles the Next.js visual node structure into a stateful LangGraph.
     Runs the graph sequence asynchronously and returns execution logs and outputs.
     """
-    # 1. Initialize StateGraph
-    workflow = StateGraph(GraphState)
-    
-    # Map node IDs to nodes dictionary
-    nodes_map = {n["id"]: n for n in nodes_json}
-    
-    # Filter nodes to include only active control flow nodes in LangGraph
+    # 1. Gather active nodes and trigger edges
     active_nodes = [n for n in nodes_json if n.get("type") in ACTIVE_TYPES]
     active_nodes_map = {n["id"]: n for n in active_nodes}
-    
-    # 2. Add active LangGraph nodes
-    for node_id in active_nodes_map.keys():
+    trigger_edges = [e for e in edges_json if _is_trigger_handle(e.get("sourceHandle"))]
+
+    # 2. Loop-body ownership: nodes reachable from any loop's Body port run
+    # inside run_trigger_chain, not as top-level LangGraph nodes.
+    body_owned = set()
+    stack = [
+        e["target"] for e in trigger_edges
+        if e.get("sourceHandle") == "loopBody" and e.get("source") in active_nodes_map
+    ]
+    while stack:
+        nid = stack.pop()
+        if nid in body_owned:
+            continue
+        body_owned.add(nid)
+        for e in trigger_edges:
+            if e.get("source") == nid and e.get("sourceHandle") != "loopBody":
+                stack.append(e["target"])
+
+    graph_ids = {nid for nid in active_nodes_map if nid not in body_owned}
+
+    # 3. Plan plain edges and conditional branches
+    plain_edges = []
+    for edge in trigger_edges:
+        source, target = edge.get("source"), edge.get("target")
+        if edge.get("sourceHandle") == "loopBody":
+            continue
+        if source not in graph_ids or target not in graph_ids:
+            continue
+        src_type = active_nodes_map[source]["type"]
+        if src_type == "ifElseTrigger":
+            continue
+        if src_type in LOOP_TYPES and edge.get("sourceHandle") != "done":
+            continue
+        plain_edges.append((source, target))
+
+    cond_specs = []
+    for node in [n for n in active_nodes if n["type"] == "ifElseTrigger" and n["id"] in graph_ids]:
+        node_id = node["id"]
+        true_targets = [e["target"] for e in edges_json if e["source"] == node_id and e["sourceHandle"] == "onTrue"]
+        false_targets = [e["target"] for e in edges_json if e["source"] == node_id and e["sourceHandle"] == "onFalse"]
+        true_node = true_targets[0] if true_targets and true_targets[0] in graph_ids else None
+        false_node = false_targets[0] if false_targets and false_targets[0] in graph_ids else None
+        cond_specs.append((node_id, true_node, false_node))
+
+    # 4. Entry points
+    trigger_nodes = [n for n in active_nodes if n["type"] == "triggerInput" and n["id"] in graph_ids]
+    if trigger_nodes:
+        entries = [tn["id"] for tn in trigger_nodes]
+    elif graph_ids:
+        entries = [next(iter(graph_ids))]
+    else:
+        return {"success": True, "logs": ["No active execution nodes found."], "outputs": {}}
+
+    # 5. Reachability: LangGraph raises on nodes with no path from the entry
+    # point, so drop them with a log instead of crashing the whole run
+    # (e.g. bridge clones sitting in a dimension with no trigger wiring).
+    adjacency = {}
+    for source, target in plain_edges:
+        adjacency.setdefault(source, []).append(target)
+    for node_id, true_node, false_node in cond_specs:
+        for t in (true_node, false_node):
+            if t:
+                adjacency.setdefault(node_id, []).append(t)
+
+    reachable = set()
+    frontier = list(entries)
+    while frontier:
+        nid = frontier.pop()
+        if nid in reachable:
+            continue
+        reachable.add(nid)
+        frontier.extend(adjacency.get(nid, []))
+
+    skipped = sorted(graph_ids - reachable)
+    graph_ids &= reachable
+    plain_edges = [(s, t) for s, t in plain_edges if s in graph_ids and t in graph_ids]
+    cond_specs = [
+        (nid, t if t in graph_ids else None, f if f in graph_ids else None)
+        for nid, t, f in cond_specs if nid in graph_ids
+    ]
+
+    startup_logs = ["Graph compiled successfully. Starting execution."]
+    if skipped:
+        startup_logs.append(
+            f"Skipped {len(skipped)} node(s) with no trigger path from an entry point: {', '.join(skipped)}"
+        )
+
+    # 6. Build the LangGraph
+    workflow = StateGraph(GraphState)
+    for node_id in graph_ids:
         def make_node(nid=node_id):
             async def node_func(state):
                 return await run_node_task(nid, state)
             return node_func
         workflow.add_node(node_id, make_node())
 
-    # 3. Add Edges (Control / Trigger flow paths)
-    trigger_edges = [
-        e for e in edges_json 
-        if (e.get("sourceHandle") or "").endswith("Trigger") or 
-           e.get("sourceHandle") in ("triggerOut", "outTrigger", "onTrue", "onFalse")
-    ]
-    
-    # Compile standard connection edges
-    for edge in trigger_edges:
-        source = edge["source"]
-        target = edge["target"]
-        
-        # Only add edge if both source and target are in our active nodes list
-        if source in active_nodes_map and target in active_nodes_map:
-            # Skip if source is a conditional branching node
-            if active_nodes_map[source]["type"] == "ifElseTrigger":
-                continue
-            workflow.add_edge(source, target)
+    for source, target in plain_edges:
+        workflow.add_edge(source, target)
 
-    # 4. Add Conditional Routing Edges (if/else nodes)
-    if_else_nodes = [n for n in active_nodes if n["type"] == "ifElseTrigger"]
-    for node in if_else_nodes:
-        node_id = node["id"]
-        
-        # Check connected branches
-        true_targets = [e["target"] for e in edges_json if e["source"] == node_id and e["sourceHandle"] == "onTrue"]
-        false_targets = [e["target"] for e in edges_json if e["source"] == node_id and e["sourceHandle"] == "onFalse"]
-        
-        true_node = true_targets[0] if true_targets and true_targets[0] in active_nodes_map else END
-        false_node = false_targets[0] if false_targets and false_targets[0] in active_nodes_map else END
-
-        def route_condition(state, nid=node_id, t_node=true_node, f_node=false_node):
-            inputs = resolve_inputs(nid, state)
-            cond_val = inputs.get("condition", False)
-            if isinstance(cond_val, str):
-                trimmed = cond_val.strip().lower()
-                if trimmed in ("true", "1", "yes"):
-                    condition = True
-                elif trimmed in ("false", "0", "no", ""):
-                    condition = False
-                else:
-                    try:
-                        # Build context from other node output values
-                        context = {}
-                        for source_nid, node_outs in state["outputs"].items():
-                            for port_id, val in node_outs.items():
-                                context[f"{source_nid}_{port_id}"] = val
-                                if len(node_outs) == 1 or port_id in ("value", "out", "result", "response"):
-                                    context[source_nid] = val
-                        resolved = safe_evaluate(cond_val, context)
-                        condition = bool(resolved)
-                    except Exception as e:
-                        state["logs"].append(f"Condition expression evaluation failed: {str(e)}. Defaulting to False.")
-                        condition = False
-            else:
-                condition = bool(cond_val)
-            
+    for node_id, true_node, false_node in cond_specs:
+        def route_condition(state, nid=node_id):
+            cond_val = resolve_inputs(nid, state).get("condition", False)
+            condition = _condition_flag(cond_val, state)
             state["logs"].append(f"If-Else routing decision resolved to: {condition} (from value: '{cond_val}')")
             return "true_path" if condition else "false_path"
 
@@ -377,35 +617,22 @@ async def compile_and_run_graph(nodes_json: List[Any], edges_json: List[Any]) ->
             node_id,
             route_condition,
             {
-                "true_path": true_node,
-                "false_path": false_node
-            }
+                "true_path": true_node if true_node else END,
+                "false_path": false_node if false_node else END,
+            },
         )
 
-    # 5. Determine Entry Points
-    trigger_nodes = [n for n in active_nodes if n["type"] == "triggerInput"]
-    if len(trigger_nodes) > 1:
+    if len(entries) > 1:
         # Add virtual entry node for parallel execution of multiple dimensions
         async def virtual_node_func(state):
             return {"logs": ["Initiated parallel dimensions execution."]}
         workflow.add_node("virtual_start", virtual_node_func)
-        
-        # Connect virtual entry to all layer triggers
-        for tn in trigger_nodes:
-            workflow.add_edge("virtual_start", tn["id"])
-            
+        for entry in entries:
+            workflow.add_edge("virtual_start", entry)
         workflow.set_entry_point("virtual_start")
-    elif trigger_nodes:
-        # Set first trigger node as graph start
-        workflow.set_entry_point(trigger_nodes[0]["id"])
     else:
-        # Fallback start (first active node)
-        if active_nodes:
-            workflow.set_entry_point(active_nodes[0]["id"])
-        else:
-            return {"logs": ["No active execution nodes found."], "outputs": {}}
+        workflow.set_entry_point(entries[0])
 
-    # 6. Compile Graph
     app = workflow.compile()
 
     # 7. Initialize State & Invoke
@@ -413,7 +640,7 @@ async def compile_and_run_graph(nodes_json: List[Any], edges_json: List[Any]) ->
         "nodes": {n["id"]: n for n in nodes_json},
         "edges": edges_json,
         "outputs": {},
-        "logs": ["Graph compiled successfully. Starting execution."],
+        "logs": startup_logs,
         "error": "",
         "active_node": ""
     }

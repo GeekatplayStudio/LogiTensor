@@ -10,7 +10,7 @@ import {
   NodeChange,
 } from "@xyflow/react";
 import { NodeData, NODE_DEFINITIONS } from "@/types/nodes";
-import { computeNodeOutputs, handleTriggerOperation } from "@/lib/execution-helpers";
+import { computeNodeOutputs, handleTriggerOperation, resolveConditionFlag } from "@/lib/execution-helpers";
 import { getPortColor } from "@/lib/node-styles";
 import { toast } from "sonner";
 
@@ -72,6 +72,35 @@ function resolveNodeInputs(
   return inputs;
 }
 
+// Keeps a Formula node's lettered inputs elastic: when every data input is
+// connected, a fresh letter appears; extra trailing unconnected letters are
+// trimmed back so exactly one spare input is always available (min a + b).
+function adjustFormulaInputs(node: Node<NodeData>, edges: Edge[]): Node<NodeData> | null {
+  if (node.type !== "mathNode") return null;
+  const connected = new Set(
+    edges.filter((e) => e.target === node.id).map((e) => e.targetHandle)
+  );
+  const inputs = [...node.data.inputs];
+  const isConnected = (id: string) => connected.has(id);
+
+  // Trim trailing unconnected inputs down to one spare (never below 2 total)
+  while (
+    inputs.length > 2 &&
+    !isConnected(inputs[inputs.length - 1].id) &&
+    !isConnected(inputs[inputs.length - 2].id)
+  ) {
+    inputs.pop();
+  }
+  // Grow when everything is connected
+  if (inputs.every((i) => isConnected(i.id)) && inputs.length < 26) {
+    const letter = String.fromCharCode(97 + inputs.length);
+    inputs.push({ id: letter, name: letter.toUpperCase(), type: "data", dataType: "any", value: 0 });
+  }
+
+  if (inputs.length === node.data.inputs.length) return null;
+  return { ...node, data: { ...node.data, inputs } };
+}
+
 // Writes computed output port values (and evaluation error state) onto a node.
 function applyComputedOutputs(
   node: Node<NodeData>,
@@ -100,6 +129,34 @@ export interface Layer {
   edges: Edge[];
 }
 
+// A Hub is one complete multi-dimensional workflow: a named collection of
+// layers. The Federation is the space of many hubs, linked through nodes
+// flagged as federation endpoints.
+export interface Hub {
+  id: string;
+  name: string;
+  layers: Layer[];
+  activeLayerId: string;
+}
+
+// Deep-copies a layer's contents with remapped node/edge ids so a copy never
+// collides with the original when layers are merged for backend execution.
+function cloneLayerContents(nodes: Node<NodeData>[], edges: Edge[]) {
+  const idMap = new Map<string, string>();
+  const newNodes = nodes.map((n, idx) => {
+    const newId = `${n.id}_copy${Date.now()}_${uniqueIdCounter++}_${idx}`;
+    idMap.set(n.id, newId);
+    return { ...n, id: newId, selected: false };
+  });
+  const newEdges = edges.map((e, idx) => ({
+    ...e,
+    id: uniqueId(`edge_${idx}`),
+    source: idMap.get(e.source) ?? e.source,
+    target: idMap.get(e.target) ?? e.target,
+  }));
+  return { nodes: newNodes, edges: newEdges };
+}
+
 interface NodeEditorState {
   nodes: Node<NodeData>[];
   edges: Edge[];
@@ -117,8 +174,19 @@ interface NodeEditorState {
   duplicateLayer: (id: string) => void;
   selectLayer: (id: string) => void;
   deleteLayer: (id: string) => void;
+  renameLayer: (id: string, name: string) => void;
   setIsLayersViewOpen: (open: boolean) => void;
   toggleNodeMultiDimensional: (nodeId: string) => void;
+
+  // Federation (hubs) State
+  hubs: Hub[];
+  activeHubId: string;
+  addHub: () => void;
+  duplicateHub: (id: string) => void;
+  deleteHub: (id: string) => void;
+  selectHub: (id: string) => void;
+  renameHub: (id: string, name: string) => void;
+  toggleNodeFederated: (nodeId: string) => void;
   
   // React Flow Handlers
   onNodesChange: (changes: NodeChange[]) => void;
@@ -144,6 +212,26 @@ interface NodeEditorState {
   loadFromFile: (jsonContent: string) => void;
 }
 
+// Folds the live canvas state (nodes/edges of the active layer) back into the
+// layers array, and the live layers back into the active hub — producing fully
+// materialized snapshots for hub switching, the federation view, and saving.
+function syncHubs(s: {
+  nodes: Node<NodeData>[];
+  edges: Edge[];
+  layers: Layer[];
+  activeLayerId: string;
+  hubs: Hub[];
+  activeHubId: string;
+}): { liveLayers: Layer[]; hubs: Hub[] } {
+  const liveLayers = s.layers.map((l) =>
+    l.id === s.activeLayerId ? { ...l, nodes: s.nodes, edges: s.edges } : l
+  );
+  const hubs = s.hubs.map((h) =>
+    h.id === s.activeHubId ? { ...h, layers: liveLayers, activeLayerId: s.activeLayerId } : h
+  );
+  return { liveLayers, hubs };
+}
+
 export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
   nodes: [],
   edges: [],
@@ -152,11 +240,137 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
   setStepDelayMs: (delay) => set({ stepDelayMs: delay }),
   runLoops: 1,
   setRunLoops: (loops) => set({ runLoops: loops }),
-  
+
   // Layers state
   layers: [{ id: "layer_default", name: "Dimension Alpha", nodes: [], edges: [] }],
   activeLayerId: "layer_default",
   isLayersViewOpen: false,
+
+  // Federation state
+  hubs: [
+    {
+      id: "hub_default",
+      name: "Hub Prime",
+      layers: [{ id: "layer_default", name: "Dimension Alpha", nodes: [], edges: [] }],
+      activeLayerId: "layer_default",
+    },
+  ],
+  activeHubId: "hub_default",
+
+  addHub: () => {
+    const { hubs } = syncHubs(get());
+    const layerId = uniqueId("layer");
+    const hub: Hub = {
+      id: uniqueId("hub"),
+      name: `Hub ${hubs.length + 1}`,
+      layers: [{ id: layerId, name: "Dimension Alpha", nodes: [], edges: [] }],
+      activeLayerId: layerId,
+    };
+    set({ hubs: [...hubs, hub] });
+    toast.success(`Created ${hub.name}`);
+  },
+
+  duplicateHub: (id) => {
+    const { hubs } = syncHubs(get());
+    const src = hubs.find((h) => h.id === id);
+    if (!src) return;
+    const newLayers = src.layers.map((l) => {
+      const c = cloneLayerContents(l.nodes, l.edges);
+      return { id: uniqueId("layer"), name: l.name, nodes: c.nodes, edges: c.edges };
+    });
+    const activeIdx = Math.max(0, src.layers.findIndex((l) => l.id === src.activeLayerId));
+    const hub: Hub = {
+      id: uniqueId("hub"),
+      name: `${src.name} Copy`,
+      layers: newLayers,
+      activeLayerId: newLayers[activeIdx]?.id ?? newLayers[0]?.id ?? "",
+    };
+    set({ hubs: [...hubs, hub] });
+    toast.success(`Duplicated "${src.name}" to "${hub.name}"`);
+  },
+
+  deleteHub: (id) => {
+    const s = get();
+    if (s.hubs.length <= 1) {
+      toast.error("Cannot delete the last remaining hub!");
+      return;
+    }
+    const { hubs } = syncHubs(s);
+    const remaining = hubs.filter((h) => h.id !== id);
+    if (s.activeHubId === id) {
+      const next = remaining[0];
+      const activeLayer =
+        next.layers.find((l) => l.id === next.activeLayerId) ?? next.layers[0];
+      set({
+        hubs: remaining,
+        activeHubId: next.id,
+        layers: next.layers,
+        activeLayerId: activeLayer?.id ?? "",
+        nodes: activeLayer?.nodes ?? [],
+        edges: activeLayer?.edges ?? [],
+      });
+    } else {
+      set({ hubs: remaining });
+    }
+    toast.success("Hub deleted.");
+  },
+
+  selectHub: (id) => {
+    const s = get();
+    if (id === s.activeHubId) return;
+    const { hubs } = syncHubs(s);
+    const target = hubs.find((h) => h.id === id);
+    if (!target) return;
+    const activeLayer =
+      target.layers.find((l) => l.id === target.activeLayerId) ?? target.layers[0];
+    set({
+      hubs,
+      activeHubId: id,
+      layers: target.layers,
+      activeLayerId: activeLayer?.id ?? "",
+      nodes: activeLayer?.nodes ?? [],
+      edges: activeLayer?.edges ?? [],
+    });
+  },
+
+  renameHub: (id, name) => {
+    set((state) => ({
+      hubs: state.hubs.map((h) => (h.id === id ? { ...h, name } : h)),
+    }));
+  },
+
+  renameLayer: (id, name) => {
+    set((state) => ({
+      layers: state.layers.map((l) => (l.id === id ? { ...l, name } : l)),
+    }));
+  },
+
+  toggleNodeFederated: (nodeId) => {
+    const node = get().nodes.find((n) => n.id === nodeId);
+    if (!node) return;
+    const fed = !node.data.config?.isFederated;
+    const sid = node.data.config?.sharedId;
+    const patch = (n: Node<NodeData>): Node<NodeData> => ({
+      ...n,
+      data: { ...n.data, config: { ...n.data.config, isFederated: fed } },
+    });
+    set((state) => ({
+      // Keep multi-dimensional clones in sync so the federation flag is a
+      // property of the logical node, not one visual instance of it.
+      nodes: state.nodes.map((n) =>
+        n.id === nodeId || (sid && n.data.config?.sharedId === sid) ? patch(n) : n
+      ),
+      layers: state.layers.map((l) => ({
+        ...l,
+        nodes: l.nodes.map((n) => (sid && n.data.config?.sharedId === sid ? patch(n) : n)),
+      })),
+    }));
+    toast.success(
+      fed
+        ? `"${node.data.label}" is now a federation endpoint`
+        : `"${node.data.label}" federation link removed`
+    );
+  },
   
   addLayer: () => {
     const id = uniqueId("layer");
@@ -176,27 +390,12 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
     const sourceNodes = id === activeLayerId ? nodes : sourceLayer.nodes;
     const sourceEdges = id === activeLayerId ? edges : sourceLayer.edges;
 
-    // Remap node/edge ids so the copy never collides with the original
-    // when both layers' nodes are merged for backend execution.
-    const idMap = new Map<string, string>();
-    const newNodes = sourceNodes.map((n, idx) => {
-      const newId = `${n.id}_copy${Date.now()}_${idx}`;
-      idMap.set(n.id, newId);
-      return { ...n, id: newId, selected: false };
-    });
-    const newEdges = sourceEdges.map((e, idx) => ({
-      ...e,
-      id: `edge_${Date.now()}_${idx}`,
-      source: idMap.get(e.source) ?? e.source,
-      target: idMap.get(e.target) ?? e.target,
-    }));
-
-    const newLayerId = uniqueId("layer");
+    const cloned = cloneLayerContents(sourceNodes, sourceEdges);
     const newLayer: Layer = {
-      id: newLayerId,
+      id: uniqueId("layer"),
       name: `${sourceLayer.name} Copy`,
-      nodes: newNodes,
-      edges: newEdges,
+      nodes: cloned.nodes,
+      edges: cloned.edges,
     };
 
     // Sync the active layer's live canvas state back into the layers array
@@ -266,13 +465,10 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
       set({ isLayersViewOpen: false });
       return;
     }
-    // Sync the active layer's live canvas state into `layers` before showing the
-    // deck, so its preview card reflects nodes added since the last layer switch.
-    const { activeLayerId, nodes, edges, layers } = get();
-    set({
-      layers: layers.map((l) => (l.id === activeLayerId ? { ...l, nodes, edges } : l)),
-      isLayersViewOpen: true,
-    });
+    // Sync live canvas state into layers AND hubs before showing the stack, so
+    // both the stack view and the federation view render fresh snapshots.
+    const { liveLayers, hubs } = syncHubs(get());
+    set({ layers: liveLayers, hubs, isLayersViewOpen: true });
   },
   
   toggleNodeMultiDimensional: (nodeId) => {
@@ -451,25 +647,35 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
 
       const newEdges = addEdge(connectionWithStyle, filteredEdges);
 
+      // Grow Formula-node inputs when their last free letter gets used
+      const updatedNodes = state.nodes.map((n) => {
+        if (n.id !== target) return n;
+        return adjustFormulaInputs(n, newEdges) ?? n;
+      });
+
       // Trigger evaluation downstream immediately when connected
       setTimeout(() => {
         get().evaluateNode(target);
       }, 0);
 
-      return { edges: newEdges };
+      return { edges: newEdges, nodes: updatedNodes };
     });
   },
 
   disconnectHandle: (nodeId, handleId, type) => {
-    set((state) => ({
-      edges: state.edges.filter((edge) => {
+    set((state) => {
+      const edges = state.edges.filter((edge) => {
         if (type === "target") {
           return !(edge.target === nodeId && edge.targetHandle === handleId);
         } else {
           return !(edge.source === nodeId && edge.sourceHandle === handleId);
         }
-      }),
-    }));
+      });
+      const nodes = state.nodes.map((n) =>
+        n.id === nodeId ? adjustFormulaInputs(n, edges) ?? n : n
+      );
+      return { edges, nodes };
+    });
   },
 
   addNode: (type, x, y) => {
@@ -729,34 +935,83 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
         }
       }
 
-      // Handle operations triggered by execution flow using the execution helper
-      const triggerRes = await handleTriggerOperation(
-        currentTargetNode.type || "",
-        inputs,
-        currentTargetNode.data.config || {},
-        targetPortId || ""
-      );
-      nextTriggerPort = triggerRes.nextTriggerPort;
-
-      if (triggerRes.updatedConfig) {
+      // Publishes a loop counter onto the loop node's config + outputs and
+      // re-evaluates so downstream data consumers see the fresh value.
+      const publishLoopValue = (key: string, value: number) => {
         set((state) => ({
-          nodes: state.nodes.map((n) => {
-            if (n.id === targetNodeId) {
-              return {
-                ...n,
-                data: {
-                  ...n.data,
-                  config: triggerRes.updatedConfig,
-                },
-              };
-            }
-            return n;
-          }),
+          nodes: state.nodes.map((n) =>
+            n.id === targetNodeId
+              ? { ...n, data: { ...n.data, config: { ...n.data.config, [key]: value } } }
+              : n
+          ),
         }));
-      }
-
-      if (currentTargetNode.type === "counterNode") {
         get().evaluateNode(targetNodeId);
+      };
+
+      if (currentTargetNode.type === "forLoopNode") {
+        const count = Math.max(0, Math.min(1000, Number(inputs.count ?? 3)));
+        for (let i = 0; i < count; i++) {
+          publishLoopValue("index", i);
+          await get().triggerNode(targetNodeId, "loopBody");
+        }
+        nextTriggerPort = "done";
+      } else if (currentTargetNode.type === "whileLoopNode") {
+        const condEdge = get().edges.find(
+          (e) => e.target === targetNodeId && e.targetHandle === "condition"
+        );
+        let iteration = 0;
+        while (iteration < 1000) {
+          publishLoopValue("iteration", iteration);
+          // Re-evaluate the condition's upstream chain each pass — the loop
+          // body may have changed the values feeding it (e.g. a counter).
+          let condVal: any;
+          if (condEdge) {
+            get().evaluateNode(condEdge.source);
+            const srcNode = get().nodes.find((n) => n.id === condEdge.source);
+            condVal = srcNode?.data.outputs.find((o) => o.id === condEdge.sourceHandle)?.value;
+          } else {
+            condVal = get()
+              .nodes.find((n) => n.id === targetNodeId)
+              ?.data.inputs.find((i) => i.id === "condition")?.value;
+          }
+          if (!resolveConditionFlag(condVal)) break;
+          await get().triggerNode(targetNodeId, "loopBody");
+          iteration++;
+        }
+        if (iteration >= 1000) {
+          toast.error("While Loop stopped: 1000-iteration safety cap reached");
+        }
+        nextTriggerPort = "done";
+      } else {
+        // Handle operations triggered by execution flow using the execution helper
+        const triggerRes = await handleTriggerOperation(
+          currentTargetNode.type || "",
+          inputs,
+          currentTargetNode.data.config || {},
+          targetPortId || ""
+        );
+        nextTriggerPort = triggerRes.nextTriggerPort;
+
+        if (triggerRes.updatedConfig) {
+          set((state) => ({
+            nodes: state.nodes.map((n) => {
+              if (n.id === targetNodeId) {
+                return {
+                  ...n,
+                  data: {
+                    ...n.data,
+                    config: triggerRes.updatedConfig,
+                  },
+                };
+              }
+              return n;
+            }),
+          }));
+        }
+
+        if (currentTargetNode.type === "counterNode") {
+          get().evaluateNode(targetNodeId);
+        }
       }
     } catch (err: any) {
       status = "error";
@@ -1033,17 +1288,16 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
   },
 
   saveToFile: () => {
-    const { activeLayerId, nodes, edges, layers } = get();
-    const currentLayers = layers.map((l) => {
-      if (l.id === activeLayerId) {
-        return { ...l, nodes, edges };
-      }
-      return l;
-    });
+    const state = get();
+    const { liveLayers, hubs } = syncHubs(state);
 
     const filePayload = JSON.stringify({
-      activeLayerId,
-      layers: currentLayers
+      version: 2,
+      activeHubId: state.activeHubId,
+      hubs,
+      // Legacy fields so older builds can still open the active hub
+      activeLayerId: state.activeLayerId,
+      layers: liveLayers,
     }, null, 2);
 
     const blob = new Blob([filePayload], { type: "application/json" });
@@ -1060,11 +1314,28 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
   loadFromFile: (jsonContent) => {
     try {
       const data = JSON.parse(jsonContent);
-      if (data.layers && Array.isArray(data.layers)) {
+      if (data.hubs && Array.isArray(data.hubs) && data.hubs.length > 0) {
+        // v2 federation format
+        const activeHub =
+          data.hubs.find((h: any) => h.id === data.activeHubId) || data.hubs[0];
+        const activeLayer =
+          activeHub.layers?.find((l: any) => l.id === activeHub.activeLayerId) ||
+          activeHub.layers?.[0];
+        set({
+          hubs: data.hubs,
+          activeHubId: activeHub.id,
+          layers: activeHub.layers || [],
+          activeLayerId: activeLayer?.id || "",
+          nodes: activeLayer?.nodes || [],
+          edges: activeLayer?.edges || [],
+        });
+      } else if (data.layers && Array.isArray(data.layers)) {
         const active = data.activeLayerId || data.layers[0]?.id;
         const activeLayer = data.layers.find((l: any) => l.id === active) || data.layers[0];
-        
+
         set({
+          hubs: [{ id: "hub_default", name: "Hub Prime", layers: data.layers, activeLayerId: active }],
+          activeHubId: "hub_default",
           layers: data.layers,
           activeLayerId: active,
           nodes: activeLayer?.nodes || [],
@@ -1074,8 +1345,11 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
         // Fallback loading format (legacy single layer)
         const nodes = data.nodes || [];
         const edges = data.edges || [];
+        const layers = [{ id: "layer_default", name: "Dimension Alpha", nodes, edges }];
         set({
-          layers: [{ id: "layer_default", name: "Dimension Alpha", nodes, edges }],
+          hubs: [{ id: "hub_default", name: "Hub Prime", layers, activeLayerId: "layer_default" }],
+          activeHubId: "hub_default",
+          layers,
           activeLayerId: "layer_default",
           nodes,
           edges

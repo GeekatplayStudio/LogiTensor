@@ -1,5 +1,32 @@
 import { safeEvaluate } from "./safe-evaluator";
 
+// Numeric-looking strings become numbers so the Formula node does math on
+// them; everything else stays as-is so `+` concatenates and comparisons work
+// lexically — this is the number-vs-string awareness of the Formula node.
+function coerceOperand(v: any): any {
+  if (typeof v === "string") {
+    const t = v.trim();
+    if (t !== "" && !isNaN(Number(t))) return Number(t);
+  }
+  return v;
+}
+
+/**
+ * Resolves any condition-ish value (booleans, "true"/"1"/"yes" strings, or a
+ * safe expression string) to a boolean. Shared by If/Else and While Loop.
+ */
+export function resolveConditionFlag(condVal: any): boolean {
+  if (typeof condVal !== "string") return Boolean(condVal);
+  const trimmed = condVal.trim().toLowerCase();
+  if (trimmed === "true" || trimmed === "1" || trimmed === "yes") return true;
+  if (trimmed === "false" || trimmed === "0" || trimmed === "no" || trimmed === "") return false;
+  try {
+    return Boolean(safeEvaluate(trimmed, {}));
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Computes data output port values based on the node's type, inputs, and config parameters.
  */
@@ -74,6 +101,66 @@ export function computeNodeOutputs(
       outputs.out = safeEvaluate(expr, inputs);
       break;
     }
+    case "mathNode": {
+      const expr = config.expression ?? "a + b";
+      const ctx: Record<string, any> = {};
+      for (const key of Object.keys(inputs)) ctx[key] = coerceOperand(inputs[key]);
+      outputs.out = safeEvaluate(expr, ctx);
+      break;
+    }
+    case "mathFunctionNode": {
+      const a = Number(inputs.a ?? 0);
+      const b = Number(inputs.b ?? 0);
+      const op = config.op ?? "abs";
+      const fns: Record<string, () => number> = {
+        abs: () => Math.abs(a),
+        round: () => Math.round(a),
+        floor: () => Math.floor(a),
+        ceil: () => Math.ceil(a),
+        sqrt: () => Math.sqrt(a),
+        pow: () => Math.pow(a, b),
+        min: () => Math.min(a, b),
+        max: () => Math.max(a, b),
+        mod: () => (b === 0 ? 0 : ((a % b) + b) % b),
+      };
+      outputs.out = (fns[op] ?? fns.abs)();
+      break;
+    }
+    case "filterNode": {
+      const val = inputs.value;
+      const search = String(inputs.search ?? "");
+      const hay = typeof val === "object" && val !== null ? JSON.stringify(val) : String(val ?? "");
+      const found = config.caseSensitive
+        ? hay.includes(search)
+        : hay.toLowerCase().includes(search.toLowerCase());
+      const pass = (config.mode ?? "include") === "include" ? found : !found;
+      outputs.match = pass;
+      outputs.out = pass ? val : null;
+      break;
+    }
+    case "stringOpNode": {
+      const text = String(inputs.text ?? "");
+      const op = config.op ?? "uppercase";
+      if (op === "uppercase") outputs.out = text.toUpperCase();
+      else if (op === "lowercase") outputs.out = text.toLowerCase();
+      else if (op === "trim") outputs.out = text.trim();
+      else if (op === "length") outputs.out = text.length;
+      else if (op === "reverse") outputs.out = [...text].reverse().join("");
+      else outputs.out = text;
+      break;
+    }
+    case "replaceTextNode": {
+      const text = String(inputs.text ?? "");
+      const find = String(inputs.find ?? "");
+      outputs.out = find === "" ? text : text.split(find).join(String(inputs.replace ?? ""));
+      break;
+    }
+    case "forLoopNode":
+      outputs.index = Number(config.index ?? 0);
+      break;
+    case "whileLoopNode":
+      outputs.iteration = Number(config.iteration ?? 0);
+      break;
     case "counterNode":
       outputs.count = Number(config.count ?? 0);
       break;
@@ -132,26 +219,8 @@ export async function handleTriggerOperation(
     nextTriggerPort = "outTrigger";
   } 
   else if (type === "ifElseTrigger") {
-    let condition = false;
-    const condVal = inputs.condition;
-    if (typeof condVal === "string") {
-      const trimmed = condVal.trim().toLowerCase();
-      if (trimmed === "true" || trimmed === "1" || trimmed === "yes") {
-        condition = true;
-      } else if (trimmed === "false" || trimmed === "0" || trimmed === "no" || trimmed === "") {
-        condition = false;
-      } else {
-        try {
-          condition = Boolean(safeEvaluate(trimmed, {}));
-        } catch {
-          condition = false;
-        }
-      }
-    } else {
-      condition = Boolean(condVal);
-    }
-    nextTriggerPort = condition ? "onTrue" : "onFalse";
-  } 
+    nextTriggerPort = resolveConditionFlag(inputs.condition) ? "onTrue" : "onFalse";
+  }
   else if (type === "counterNode") {
     let change = 0;
     if (targetPortId === "incTrigger") change = 1;

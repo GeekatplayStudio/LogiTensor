@@ -84,12 +84,21 @@
   * {
     @apply border-zinc-900 outline-none;
   }
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    /* Dynamic viewport height so the app always fills the actual visible
+       window — 100vh doesn't update when browser chrome (mobile toolbars,
+       window resize) changes the available space, causing stale sizing. */
+    height: 100dvh;
+  }
   body {
     @apply bg-zinc-950 text-zinc-100;
     font-family: 'Outfit', sans-serif;
   }
   html {
-    @apply h-full overflow-hidden;
+    @apply overflow-hidden;
     font-family: 'Outfit', sans-serif;
   }
 }

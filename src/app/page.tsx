@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import Sidebar from "@/components/node-editor/sidebar";
 import Canvas from "@/components/node-editor/canvas";
+import LayersStackView from "@/components/node-editor/layers-stack-view";
+import HelpAboutModal from "@/components/node-editor/help-about-modal";
 import { useNodeEditorStore } from "@/components/node-editor/use-node-editor-store";
 import {
   Play,
@@ -13,9 +15,10 @@ import {
   Layers,
   Activity,
   Plus,
-  Copy,
   ChevronLeft,
   ChevronRight,
+  HelpCircle,
+  Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -37,12 +40,11 @@ export default function Home() {
   const activeLayerId = useNodeEditorStore((state) => state.activeLayerId);
   const isLayersViewOpen = useNodeEditorStore((state) => state.isLayersViewOpen);
   const addLayer = useNodeEditorStore((state) => state.addLayer);
-  const duplicateLayer = useNodeEditorStore((state) => state.duplicateLayer);
   const selectLayer = useNodeEditorStore((state) => state.selectLayer);
-  const deleteLayer = useNodeEditorStore((state) => state.deleteLayer);
   const setIsLayersViewOpen = useNodeEditorStore((state) => state.setIsLayersViewOpen);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [helpTab, setHelpTab] = useState<"help" | "about" | null>(null);
 
   const handleLoadClick = () => {
     fileInputRef.current?.click();
@@ -94,7 +96,7 @@ export default function Home() {
   }, [isLayersViewOpen, layers, activeLayerId, selectLayer, setIsLayersViewOpen]);
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-zinc-950 text-zinc-100 select-none">
+    <div className="flex flex-col h-dvh w-full overflow-hidden bg-zinc-950 text-zinc-100 select-none">
       {/* Top Navbar */}
       <header className="h-14 border-b border-zinc-900 bg-zinc-950 flex items-center justify-between px-6 z-20 shrink-0">
         {/* Branding & Logo */}
@@ -214,6 +216,30 @@ export default function Home() {
             accept=".json"
             className="hidden"
           />
+
+          <div className="w-px h-5 bg-zinc-800 mx-1" />
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setHelpTab("help")}
+            className="h-8 gap-1.5 px-2.5 bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+            title="How LogiBoard works"
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+            <span className="text-xs uppercase font-medium">Help</span>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setHelpTab("about")}
+            className="h-8 gap-1.5 px-2.5 bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+            title="About LogiBoard"
+          >
+            <Info className="w-3.5 h-3.5" />
+            <span className="text-xs uppercase font-medium">About</span>
+          </Button>
         </div>
       </header>
 
@@ -273,15 +299,15 @@ export default function Home() {
 
       {/* 3D Stack Deck Area Overlay */}
       {isLayersViewOpen && (
-        <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-xl z-50 flex flex-col items-center justify-center p-8 select-none">
+        <div className="absolute inset-0 bg-zinc-950/90 backdrop-blur-xl z-50 flex flex-col px-6 pt-5 select-none">
           {/* Close Button / Header */}
-          <div className="w-full max-w-5xl flex items-center justify-between mb-10">
-            <div className="flex flex-col gap-1">
+          <div className="w-full flex items-center justify-between">
+            <div className="flex flex-col gap-0.5">
               <h2 className="text-lg font-semibold text-zinc-100">
-                Dimension Layers
+                Dimension Stack
               </h2>
               <p className="text-xs text-zinc-500">
-                Use ← / → to navigate, click a page to select, Enter to confirm
+                X-ray view of every dimension&apos;s logic flow, with live bridge wiring between layers
               </p>
             </div>
             <Button
@@ -294,119 +320,16 @@ export default function Home() {
             </Button>
           </div>
 
-          {/* Dimension Pages Area */}
-          <div className="relative flex-1 w-full flex items-center justify-center perspective-[2200px]">
-            {layers.map((layer, index) => {
-              const activeIdx = layers.findIndex(l => l.id === activeLayerId);
-              const position = index - activeIdx; // -2, -1, 0, 1, 2...
-              const isCurrent = position === 0;
-              const isBefore = position < 0;
-
-              let transformStyle = "";
-              if (isCurrent) {
-                transformStyle = "translateZ(0px) rotateY(0deg) scale(1)";
-              } else if (isBefore) {
-                transformStyle = `translateX(${position * 260}px) translateZ(${position * 260}px) rotateY(32deg) scale(${1 + position * 0.1})`;
-              } else {
-                transformStyle = `translateX(${position * 260}px) translateZ(${position * -260}px) rotateY(32deg) scale(${1 - position * 0.1})`;
-              }
-
-              const depthEffect = isCurrent ? "" : "opacity-30 blur-[1px] saturate-[0.4]";
-              const zIndex = 30 - Math.abs(position);
-
-              return (
-                <div
-                  key={layer.id}
-                  onClick={() => selectLayer(layer.id)}
-                  style={{
-                    transform: transformStyle,
-                    zIndex: zIndex,
-                    transformStyle: "preserve-3d",
-                    transition: "all 0.6s cubic-bezier(0.25, 1, 0.5, 1)",
-                  }}
-                  className={`absolute w-[70vw] h-[68vh] max-w-[1000px] rounded-2xl bg-white/[0.025] backdrop-blur-xl flex flex-col justify-between shadow-[0_30px_100px_rgba(0,0,0,0.5)] cursor-pointer transition-[opacity,filter] duration-500 ${depthEffect}`}
-                >
-                  {/* Card Header */}
-                  <div className="flex items-start justify-between px-10 pt-8">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[11px] font-medium text-zinc-500 tracking-wide">
-                        Dimension Layer
-                      </span>
-                      <span className="font-semibold text-2xl text-zinc-100">
-                        {layer.name}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          duplicateLayer(layer.id);
-                        }}
-                        className="p-2 rounded-md hover:bg-white/5 text-zinc-500 hover:text-zinc-200 transition"
-                        title="Duplicate dimension to a new layer"
-                      >
-                        <Copy size={16} />
-                      </button>
-                      {layers.length > 1 && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteLayer(layer.id);
-                          }}
-                          className="p-2 rounded-md hover:bg-white/5 text-zinc-500 hover:text-red-400 transition"
-                          title="Collapse dimension"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Card Body - Schematic Preview */}
-                  <div className="flex-1 mx-10 my-6 flex items-center justify-center overflow-hidden relative select-none">
-                    {layer.nodes.length > 0 ? (
-                      <div className="w-full h-full flex flex-wrap gap-2 items-center justify-center content-center">
-                        {layer.nodes.slice(0, 14).map((node) => {
-                          let pillColor = "bg-white/[0.03] text-zinc-400";
-                          if (node.type === "triggerInput") pillColor = "bg-amber-500/[0.06] text-amber-400/80";
-                          else if (node.type === "pythonScript" || node.type?.startsWith("ollama")) pillColor = "bg-violet-500/[0.06] text-violet-400/80";
-                          else if (node.type?.endsWith("Gate") || node.type === "compareNode") pillColor = "bg-emerald-500/[0.06] text-emerald-400/80";
-                          return (
-                            <div key={node.id} className={`text-xs font-medium px-3 py-1.5 rounded-full ${pillColor}`}>
-                              {node.data.label}
-                            </div>
-                          );
-                        })}
-                        {layer.nodes.length > 14 && <span className="text-xs text-zinc-600">+{layer.nodes.length - 14} more</span>}
-                      </div>
-                    ) : (
-                      <span className="text-sm text-zinc-600">Empty dimension</span>
-                    )}
-                  </div>
-
-                  {/* Card Footer */}
-                  <div className="flex items-center justify-between text-xs font-medium text-zinc-500 px-10 pb-8">
-                    <span>{layer.nodes.length} node{layer.nodes.length === 1 ? "" : "s"}</span>
-                    <span>{layer.edges.length} connection{layer.edges.length === 1 ? "" : "s"}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Page position indicator */}
-          <div className="flex items-center gap-2 mt-10">
-            {layers.map((layer) => (
-              <div
-                key={layer.id}
-                className={`h-1.5 rounded-full transition-all ${
-                  layer.id === activeLayerId ? "w-6 bg-zinc-300" : "w-1.5 bg-zinc-700"
-                }`}
-              />
-            ))}
-          </div>
+          {/* 3D X-Ray Page Stack */}
+          <LayersStackView />
         </div>
       )}
+
+      <HelpAboutModal
+        tab={helpTab}
+        onTabChange={setHelpTab}
+        onClose={() => setHelpTab(null)}
+      />
     </div>
   );
 }
