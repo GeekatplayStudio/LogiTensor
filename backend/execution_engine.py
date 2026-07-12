@@ -28,6 +28,7 @@ ACTIVE_TYPES = {
     "textOutputNode",
     "forLoopNode",
     "whileLoopNode",
+    "randomNode",
 }
 
 LOOP_TYPES = {"forLoopNode", "whileLoopNode"}

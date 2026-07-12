@@ -266,6 +266,15 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
                         />
                         <span className="text-[9px] text-zinc-500 font-bold uppercase">{input.value ? "True" : "False"}</span>
                       </div>
+                    ) : input.id === "condition" && input.dataType === "any" ? (
+                      <Input
+                        type="text"
+                        value={input.value ?? ""}
+                        onChange={(e) => updateNodeInputStaticValue(id, input.id, e.target.value)}
+                        className="h-6 w-full text-[10px] px-1.5 py-0.5 bg-zinc-950/80 border-zinc-800 text-zinc-200 rounded focus-visible:ring-1 focus-visible:ring-zinc-700"
+                        placeholder="true, false, or a > b"
+                        title="Type true/false, a comparison like a > b or x == 5, or connect a boolean output from another node."
+                      />
                     ) : (
                       <Input
                         type={input.dataType === "number" ? "number" : "text"}

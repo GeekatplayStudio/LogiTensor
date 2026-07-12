@@ -38,7 +38,7 @@ Branded and developed by **Geekatplay Studio**.
 ### 5. Advanced Node Library
 - **Inputs**: Manual Trigger, Constants (Number, Boolean, String).
 - **Logic Gates**: AND, OR, NOT, XOR, NOR, NAND.
-- **Control Flow**: Delay, Increment/Decrement Counter, If-Else (branches trigger flow), Conditional Value (switches data value), **For Loop** (fires its Body trigger a fixed number of times with a live Index), **While Loop** (fires Body while a Condition stays true, re-evaluated every pass, with a 1000-iteration safety cap).
+- **Control Flow**: Delay, Increment/Decrement Counter, **If / Else Trigger** (its `Check` input evaluates `Condition` — type `true`/`false` or an expression like `a > b`, or wire in a boolean output — and routes to `If` or `Else`), Conditional Value (switches data value), **For Loop** (fires its Body trigger a fixed number of times with a live Index), **While Loop** (fires Body while its Condition stays true, re-checked every pass, with a 1000-iteration safety cap).
 - **Math & Compare**: Compare Values (`==`, `!=`, `<`, `<=`, `>`, `>=`), Safe Expression, **Formula** (free-form expressions over inputs that grow new lettered ports — a, b, c… — automatically as you wire them up; numbers compute, strings concatenate), **Math Function** (abs, round, floor, ceil, sqrt, pow, min, max, mod), Random Number.
 - **Data & Text**: **Filter** (passes a value through only if it includes/excludes a search term, case-sensitive optional), Text Transform (uppercase/lowercase/trim/length/reverse), Text Replace.
 - **Outputs**: Console Logger, Text Output (resizable display).

@@ -133,6 +133,14 @@ function HelpContent() {
           plus text transform/replace. <b>AI &amp; Scripts</b> runs sandboxed Python and queries local
           Ollama LLMs/VLMs. Category headers in the sidebar collapse — click one to tidy the list.
         </p>
+        <p>
+          <b>If / Else Trigger</b>, in detail: firing its <b>Check</b> input evaluates{" "}
+          <b>Condition</b> and routes to the <b>If</b> or <b>Else</b> output. Set Condition by either
+          typing directly into its box — <code>true</code>/<code>false</code>, or an expression like{" "}
+          <code>a &gt; b</code> — or by wiring a boolean-producing node (a gate, Compare Values, or
+          Filter&apos;s Match output) into it instead of typing anything. The <b>While Loop</b>
+          node&apos;s Condition works the same way, and is re-checked before every pass through its Body.
+        </p>
       </Section>
 
       <Section icon={<LayersIcon size={15} />} title="Dimensions (layers)">

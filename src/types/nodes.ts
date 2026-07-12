@@ -140,9 +140,9 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     type: "ifElseTrigger",
     label: "If / Else Trigger",
     category: "Control Flow",
-    description: "Routes an execution trigger based on a condition.",
+    description: "Checks Condition (true/false, an expression like a > b, or a wired boolean) and fires If or Else.",
     inputs: [
-      { id: "inTrigger", name: "Run", type: "trigger" },
+      { id: "inTrigger", name: "Check", type: "trigger" },
       { id: "condition", name: "Condition", type: "data", dataType: "any", value: "true" },
     ],
     outputs: [
