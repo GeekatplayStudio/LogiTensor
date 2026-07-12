@@ -31,7 +31,7 @@ function categoryColor(type?: string): string {
   if (["loggerNode", "textOutputNode"].includes(type)) return MUTED_COLORS.rose;
   if (type === "pythonScript" || type.startsWith("ollama")) return MUTED_COLORS.violet;
   if (["thresholdNeuron", "maxSelectorNode", "synapseNode", "leakyIntegrateFire"].includes(type)) return MUTED_COLORS.indigo;
-  if (["imageInputGrid", "denseLayer", "outputLayerNode"].includes(type)) return MUTED_COLORS.cyan;
+  if (["imageInputGrid", "denseLayer", "conv1dLayer", "outputLayerNode"].includes(type)) return MUTED_COLORS.cyan;
   return MUTED_COLORS.teal;
 }
 

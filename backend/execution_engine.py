@@ -184,6 +184,7 @@ BYPASS_PORTS = {
     "maxSelectorNode": ("a", "out"),
     "synapseNode": ("in", "out"),
     "denseLayer": ("in", "out"),
+    "conv1dLayer": ("in", "out"),
 }
 
 
@@ -209,6 +210,35 @@ def _generate_weights(seed: int, input_size: int, neurons: int):
     generateWeights so both sides produce the same matrix."""
     rand = _mulberry32(seed)
     return [[rand() * 2 - 1 for _ in range(input_size)] for _ in range(neurons)]
+
+
+def _conv1d_output_positions(input_len: int, kernel_size: int, stride: int) -> int:
+    if input_len < kernel_size or kernel_size < 1 or stride < 1:
+        return 0
+    return (input_len - kernel_size) // stride + 1
+
+
+def _conv1d_forward(values, seed, kernel_size, filters, stride, activation):
+    """Bit-for-bit port of conv1dForward in src/lib/execution-helpers.ts —
+    each filter's kernel slides across `values`, so every output only depends
+    on a local window, not the whole input (unlike a Dense Layer)."""
+    import math
+    positions = _conv1d_output_positions(len(values), kernel_size, stride)
+    if positions == 0:
+        return []
+    kernels = _generate_weights(seed, kernel_size, filters)  # kernels[f][k]
+    out = []
+    for f in range(filters):
+        for p in range(positions):
+            z = sum(kernels[f][k] * values[p * stride + k] for k in range(kernel_size))
+            z = max(-60.0, min(60.0, z))
+            if activation == "sigmoid":
+                out.append(1.0 / (1.0 + math.exp(-z)))
+            elif activation == "tanh":
+                out.append(math.tanh(z))
+            else:
+                out.append(max(0.0, z))  # relu
+    return out
 
 
 def _to_number_vector(v) -> list:
@@ -399,6 +429,26 @@ def execute_logic_computation(node_type: str, inputs: Dict[str, Any], config: Di
             else:
                 out.append(1.0 / (1.0 + math.exp(-z)))
         outputs["out"] = out
+    elif node_type == "conv1dLayer":
+        xs = _to_number_vector(inputs.get("in"))
+        try:
+            filters = max(1, min(32, int(float(config.get("filters", 4) or 1))))
+        except (TypeError, ValueError):
+            filters = 4
+        try:
+            kernel_size = max(1, min(16, int(float(config.get("kernelSize", 3) or 1))))
+        except (TypeError, ValueError):
+            kernel_size = 3
+        try:
+            stride = max(1, int(float(config.get("stride", 1) or 1)))
+        except (TypeError, ValueError):
+            stride = 1
+        try:
+            seed = int(float(config.get("seed", 42) or 0))
+        except (TypeError, ValueError):
+            seed = 42
+        activation = config.get("activation", "relu")
+        outputs["out"] = _conv1d_forward(xs, seed, kernel_size, filters, stride, activation)
     elif node_type == "outputLayerNode":
         xs = _to_number_vector(inputs.get("in"))
         outputs["out"] = xs

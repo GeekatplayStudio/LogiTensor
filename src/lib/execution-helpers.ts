@@ -44,12 +44,80 @@ export function generateWeights(seed: number, inputSize: number, neurons: number
 }
 
 // Coerces a port value into a numeric vector (AI Model nodes pass arrays).
-function toNumberVector(v: any): number[] {
+export function toNumberVector(v: any): number[] {
   if (!Array.isArray(v)) return [];
   return v.map((x) => {
     const n = Number(x);
     return isNaN(n) ? 0 : n;
   });
+}
+
+const CONV_ACTIVATIONS: Record<string, (z: number) => number> = {
+  relu: (z) => Math.max(0, z),
+  sigmoid: (z) => 1 / (1 + Math.exp(-z)),
+  tanh: (z) => Math.tanh(z),
+};
+
+export function conv1dOutputPositions(inputLen: number, kernelSize: number, stride: number): number {
+  if (inputLen < kernelSize || kernelSize < 1 || stride < 1) return 0;
+  return Math.floor((inputLen - kernelSize) / stride) + 1;
+}
+
+/**
+ * Runs a real 1D convolution: `filters` small kernels (generated from `seed`,
+ * same mulberry32 PRNG as Dense Layer) each slide across `input` with the
+ * given stride, producing one activated value per window. Filters' outputs
+ * are concatenated into a single feature-map vector — unlike a Dense Layer,
+ * each output only ever depends on a local neighborhood of the input.
+ */
+export function conv1dForward(
+  input: number[],
+  seed: number,
+  kernelSize: number,
+  filters: number,
+  stride: number,
+  activation: string
+): number[] {
+  const positions = conv1dOutputPositions(input.length, kernelSize, stride);
+  if (positions === 0) return [];
+  const kernels = generateWeights(seed, kernelSize, filters); // kernels[f][k]
+  const fn = CONV_ACTIVATIONS[activation] ?? CONV_ACTIVATIONS.relu;
+  const out: number[] = [];
+  for (let f = 0; f < filters; f++) {
+    for (let p = 0; p < positions; p++) {
+      let z = 0;
+      for (let k = 0; k < kernelSize; k++) z += kernels[f][k] * input[p * stride + k];
+      out.push(fn(Math.max(-60, Math.min(60, z))));
+    }
+  }
+  return out;
+}
+
+/**
+ * Full [output][input] weight matrix for a Conv1D Layer, mostly zero except
+ * each output's local receptive field — lets the 3D viewer and inline weight
+ * web reuse the exact same dense-matrix rendering path as a Dense Layer while
+ * still only lighting up the real local connections.
+ */
+export function conv1dFullWeights(
+  inputLen: number,
+  seed: number,
+  kernelSize: number,
+  filters: number,
+  stride: number
+): number[][] {
+  const positions = conv1dOutputPositions(inputLen, kernelSize, stride);
+  if (positions === 0) return [];
+  const kernels = generateWeights(seed, kernelSize, filters);
+  const weights: number[][] = [];
+  for (let f = 0; f < filters; f++) {
+    for (let p = 0; p < positions; p++) {
+      const row = new Array(inputLen).fill(0);
+      for (let k = 0; k < kernelSize; k++) row[p * stride + k] = kernels[f][k];
+      weights.push(row);
+    }
+  }
+  return weights;
 }
 
 /**
@@ -92,6 +160,7 @@ const BYPASS_PORTS: Record<string, { primaryIn: string; primaryOut: string }> = 
   maxSelectorNode: { primaryIn: "a", primaryOut: "out" },
   synapseNode: { primaryIn: "in", primaryOut: "out" },
   denseLayer: { primaryIn: "in", primaryOut: "out" },
+  conv1dLayer: { primaryIn: "in", primaryOut: "out" },
 };
 
 /**
@@ -291,6 +360,16 @@ export function computeNodeOutputs(
         if (activation === "tanh") return Math.tanh(z);
         return 1 / (1 + Math.exp(-z)); // sigmoid
       });
+      break;
+    }
+    case "conv1dLayer": {
+      const xs = toNumberVector(inputs.in);
+      const filters = Math.max(1, Math.min(32, Math.floor(Number(config.filters ?? 4) || 1)));
+      const kernelSize = Math.max(1, Math.min(16, Math.floor(Number(config.kernelSize ?? 3) || 1)));
+      const stride = Math.max(1, Math.floor(Number(config.stride ?? 1) || 1));
+      const seed = Math.floor(Number(config.seed ?? 42) || 0);
+      const activation = config.activation ?? "relu";
+      outputs.out = conv1dForward(xs, seed, kernelSize, filters, stride, activation);
       break;
     }
     case "outputLayerNode": {

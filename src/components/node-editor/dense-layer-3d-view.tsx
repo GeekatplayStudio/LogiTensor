@@ -89,12 +89,17 @@ export default function DenseLayer3DView({ layers, onClose }: Props) {
     return Array.from({ length: n }, (_, i) => start + i * PLANE_GAP);
   }, [layers.length]);
 
+  // Counts actual nonzero weights, not the dense matrix size — a Conv1D
+  // Layer's matrix is mostly zero (local receptive fields), so a raw
+  // rows*cols count would wildly overstate how many connections are real.
   const totalConnections = useMemo(
     () =>
-      layers.reduce(
-        (sum, l, k) => sum + (l.weights ? l.values.length * layers[k - 1].values.length : 0),
-        0
-      ),
+      layers.reduce((sum, l) => {
+        if (!l.weights) return sum;
+        let count = 0;
+        for (const row of l.weights) for (const w of row) if (Math.abs(w) >= 0.02) count++;
+        return sum + count;
+      }, 0),
     [layers]
   );
 

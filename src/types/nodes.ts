@@ -510,6 +510,18 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     outputs: [{ id: "out", name: "Activations", type: "data", dataType: "any" }],
     config: { neurons: 8, activation: "sigmoid", seed: 42 }, // sigmoid | relu | tanh
   },
+  conv1dLayer: {
+    type: "conv1dLayer",
+    label: "Conv1D Layer",
+    category: "AI Model",
+    description: "Sliding-window convolution: each Filter's small kernel slides across the input, so every output only connects to a local neighborhood — not the whole previous layer, unlike a Dense Layer's full mesh. Multiple filters stack into one output vector.",
+    inputs: [
+      { id: "in", name: "Values In", type: "data", dataType: "any", value: [] },
+      ENABLED_INPUT,
+    ],
+    outputs: [{ id: "out", name: "Feature Map", type: "data", dataType: "any" }],
+    config: { filters: 4, kernelSize: 3, stride: 1, activation: "relu", seed: 42 }, // relu | sigmoid | tanh
+  },
   outputLayerNode: {
     type: "outputLayerNode",
     label: "Output Layer",

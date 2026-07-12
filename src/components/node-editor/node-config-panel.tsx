@@ -343,6 +343,72 @@ export default function NodeConfigPanel({
         </div>
       )}
 
+      {type === "conv1dLayer" && (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-[10px] text-zinc-400">Filters</Label>
+            <Input
+              type="number"
+              min={1}
+              max={32}
+              value={data.config?.filters ?? 4}
+              onChange={(e) => onConfigChange("filters", e.target.value === "" ? 1 : Number(e.target.value))}
+              className="h-6 w-16 text-[10px] bg-zinc-950 border-zinc-800 text-zinc-200 py-0.5 px-1"
+            />
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-[10px] text-zinc-400" title="How many consecutive values each filter reads at once.">
+              Kernel Size
+            </Label>
+            <Input
+              type="number"
+              min={1}
+              max={16}
+              value={data.config?.kernelSize ?? 3}
+              onChange={(e) => onConfigChange("kernelSize", e.target.value === "" ? 1 : Number(e.target.value))}
+              className="h-6 w-16 text-[10px] bg-zinc-950 border-zinc-800 text-zinc-200 py-0.5 px-1"
+            />
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-[10px] text-zinc-400" title="How far the kernel window moves between reads. 1 = every position; 2 = skip every other.">
+              Stride
+            </Label>
+            <Input
+              type="number"
+              min={1}
+              value={data.config?.stride ?? 1}
+              onChange={(e) => onConfigChange("stride", e.target.value === "" ? 1 : Number(e.target.value))}
+              className="h-6 w-16 text-[10px] bg-zinc-950 border-zinc-800 text-zinc-200 py-0.5 px-1"
+            />
+          </div>
+          <Label className="text-[10px] text-zinc-400">Activation</Label>
+          <Select
+            value={data.config?.activation ?? "relu"}
+            onValueChange={(val) => onConfigChange("activation", val)}
+          >
+            <SelectTrigger className="h-7 text-xs bg-zinc-950 border-zinc-800">
+              <SelectValue placeholder="Select activation" />
+            </SelectTrigger>
+            <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-200">
+              <SelectItem value="relu">ReLU (max 0, z)</SelectItem>
+              <SelectItem value="sigmoid">Sigmoid (0–1)</SelectItem>
+              <SelectItem value="tanh">Tanh (-1–1)</SelectItem>
+            </SelectContent>
+          </Select>
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-[10px] text-zinc-400" title="Kernels are generated deterministically from this seed — same seed, same filters.">
+              Weight Seed
+            </Label>
+            <Input
+              type="number"
+              value={data.config?.seed ?? 42}
+              onChange={(e) => onConfigChange("seed", e.target.value === "" ? 0 : Number(e.target.value))}
+              className="h-6 w-16 text-[10px] bg-zinc-950 border-zinc-800 text-zinc-200 py-0.5 px-1"
+            />
+          </div>
+        </div>
+      )}
+
       {type === "pythonScript" && (
         <div className="space-y-1">
           <Label className="text-[10px] text-zinc-400">Python Code</Label>

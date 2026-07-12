@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { getPortColor, getCategoryStyles, getExecutionStyles } from "@/lib/node-styles";
 import NodeConfigPanel from "./node-config-panel";
-import { ImageGridBody, DenseLayerBody, OutputLayerBody } from "./ai-model-node-parts";
+import { ImageGridBody, DenseLayerBody, Conv1DLayerBody, OutputLayerBody } from "./ai-model-node-parts";
 
 const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) => {
   const data = rawData as any;
@@ -37,7 +37,7 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
     category = "AI & Scripts";
   } else if (["thresholdNeuron", "maxSelectorNode", "synapseNode", "leakyIntegrateFire"].includes(type || "")) {
     category = "Neural Network";
-  } else if (["imageInputGrid", "denseLayer", "outputLayerNode"].includes(type || "")) {
+  } else if (["imageInputGrid", "denseLayer", "conv1dLayer", "outputLayerNode"].includes(type || "")) {
     category = "AI Model";
   }
 
@@ -400,6 +400,7 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
         <ImageGridBody data={data} onConfigChange={handleConfigChange} />
       )}
       {type === "denseLayer" && <DenseLayerBody id={id} data={data} />}
+      {type === "conv1dLayer" && <Conv1DLayerBody id={id} data={data} />}
       {type === "outputLayerNode" && <OutputLayerBody id={id} data={data} />}
 
       {type === "textOutputNode" && (
@@ -476,5 +477,6 @@ export const nodeTypes = {
   leakyIntegrateFire: CustomNode,
   imageInputGrid: CustomNode,
   denseLayer: CustomNode,
+  conv1dLayer: CustomNode,
   outputLayerNode: CustomNode,
 };

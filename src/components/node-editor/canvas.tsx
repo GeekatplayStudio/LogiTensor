@@ -140,7 +140,7 @@ function FlowCanvas() {
             if (["filterNode", "stringOpNode", "replaceTextNode"].includes(n.type || "")) return MUTED_COLORS.emerald;
             if (["loggerNode", "textOutputNode"].includes(n.type || "")) return MUTED_COLORS.rose;
             if (["thresholdNeuron", "maxSelectorNode", "synapseNode", "leakyIntegrateFire"].includes(n.type || "")) return MUTED_COLORS.indigo;
-            if (["imageInputGrid", "denseLayer", "outputLayerNode"].includes(n.type || "")) return MUTED_COLORS.cyan;
+            if (["imageInputGrid", "denseLayer", "conv1dLayer", "outputLayerNode"].includes(n.type || "")) return MUTED_COLORS.cyan;
             return MUTED_COLORS.teal;
           }}
           maskColor="rgba(9, 9, 11, 0.7)"
