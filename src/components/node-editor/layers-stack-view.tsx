@@ -7,6 +7,7 @@ import { NodeData } from "@/types/nodes";
 import { useNodeEditorStore } from "./use-node-editor-store";
 import FederationScene from "./federation-scene";
 import { Camera, DEFAULT_CAMERA, VIEW_W, VIEW_H, project, clampPitch, clampZoom } from "@/lib/stack-3d-math";
+import { MUTED_COLORS } from "@/lib/node-styles";
 
 // True-3D dimension stack: layers are horizontal planes in world space that
 // the camera orbits around. Zooming far out transitions to the Federation
@@ -22,14 +23,14 @@ const isTriggerHandle = (h?: string | null) =>
   !!h && (h.endsWith("Trigger") || TRIGGER_HANDLES.has(h));
 
 function categoryColor(type?: string): string {
-  if (!type) return "#14b8a6";
-  if (["triggerInput", "constNum", "constBool", "constString"].includes(type)) return "#3b82f6";
-  if (["ifElseTrigger", "condValue", "delayNode", "counterNode", "forLoopNode", "whileLoopNode"].includes(type)) return "#a855f7";
-  if (["compareNode", "expressionNode", "randomNode", "mathNode", "mathFunctionNode"].includes(type)) return "#f59e0b";
-  if (["filterNode", "stringOpNode", "replaceTextNode"].includes(type)) return "#10b981";
-  if (["loggerNode", "textOutputNode"].includes(type)) return "#f43f5e";
-  if (type === "pythonScript" || type.startsWith("ollama")) return "#8b5cf6";
-  return "#14b8a6";
+  if (!type) return MUTED_COLORS.teal;
+  if (["triggerInput", "constNum", "constBool", "constString"].includes(type)) return MUTED_COLORS.blue;
+  if (["ifElseTrigger", "condValue", "delayNode", "counterNode", "forLoopNode", "whileLoopNode"].includes(type)) return MUTED_COLORS.purple;
+  if (["compareNode", "expressionNode", "randomNode", "mathNode", "mathFunctionNode"].includes(type)) return MUTED_COLORS.amber;
+  if (["filterNode", "stringOpNode", "replaceTextNode"].includes(type)) return MUTED_COLORS.emerald;
+  if (["loggerNode", "textOutputNode"].includes(type)) return MUTED_COLORS.rose;
+  if (type === "pythonScript" || type.startsWith("ollama")) return MUTED_COLORS.violet;
+  return MUTED_COLORS.teal;
 }
 
 function nodeCenter(n: Node<NodeData>): { x: number; y: number } {
@@ -149,57 +150,57 @@ export default function LayersStackView() {
       <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 bg-zinc-950/70 backdrop-blur-md border border-zinc-800/60 rounded-lg px-3 py-1.5">
         {mode === "stack" ? (
           <>
-            <span className="text-[10px] font-bold text-violet-300 uppercase tracking-wide" title={activeHubId}>
+            <span className="text-[10px] font-bold text-[#AC9BC4] uppercase tracking-wide" title={activeHubId}>
               {activeHub?.name}
             </span>
             <span className="text-zinc-700">/</span>
             <input
               value={activeLayer?.name ?? ""}
               onChange={(e) => renameLayer(activeLayerId, e.target.value)}
-              className="bg-transparent text-xs font-semibold text-cyan-300 outline-none w-32 border-b border-transparent focus:border-cyan-700"
+              className="bg-transparent text-xs font-semibold text-[#9AC0C4] outline-none w-32 border-b border-transparent focus:border-[#7FAAB0]/50"
               title={`Rename dimension (id: ${activeLayerId})`}
             />
             <span className="text-[10px] text-zinc-500">
               {activeLayer?.nodes.length ?? 0} nodes · {activeLayer?.edges.length ?? 0} links · {bridges.length} bridges
             </span>
             <div className="w-px h-4 bg-zinc-800" />
-            <button onClick={() => activeLayer && duplicateLayer(activeLayer.id)} className="p-1 rounded text-zinc-400 hover:text-cyan-300 hover:bg-zinc-800/70 transition" title="Duplicate this dimension">
+            <button onClick={() => activeLayer && duplicateLayer(activeLayer.id)} className="p-1 rounded text-zinc-400 hover:text-[#9AC0C4] hover:bg-zinc-800/70 transition" title="Duplicate this dimension">
               <Copy size={13} />
             </button>
             <button onClick={() => activeLayer && deleteLayer(activeLayer.id)} disabled={layers.length <= 1} className="p-1 rounded text-zinc-400 hover:text-red-400 hover:bg-zinc-800/70 disabled:opacity-30 transition" title="Collapse this dimension">
               <Trash2 size={13} />
             </button>
-            <button onClick={addLayer} className="p-1 rounded text-zinc-400 hover:text-cyan-300 hover:bg-zinc-800/70 transition" title="New dimension">
+            <button onClick={addLayer} className="p-1 rounded text-zinc-400 hover:text-[#9AC0C4] hover:bg-zinc-800/70 transition" title="New dimension">
               <Plus size={13} />
             </button>
             <div className="w-px h-4 bg-zinc-800" />
-            <button onClick={() => setMode("federation")} className="flex items-center gap-1 p-1 px-1.5 rounded text-fuchsia-400 hover:text-fuchsia-300 hover:bg-zinc-800/70 transition text-[10px] font-bold" title="Zoom out to the Federation level">
+            <button onClick={() => setMode("federation")} className="flex items-center gap-1 p-1 px-1.5 rounded text-[#AD8BB0] hover:text-[#C4A8C6] hover:bg-zinc-800/70 transition text-[10px] font-bold" title="Zoom out to the Federation level">
               <Boxes size={13} /> Federation
             </button>
           </>
         ) : (
           <>
-            <span className="text-[10px] font-bold text-fuchsia-300 uppercase tracking-wide">Federation</span>
+            <span className="text-[10px] font-bold text-[#C4A8C6] uppercase tracking-wide">Federation</span>
             <span className="text-zinc-700">/</span>
             <input
               value={activeHub?.name ?? ""}
               onChange={(e) => renameHub(activeHubId, e.target.value)}
-              className="bg-transparent text-xs font-semibold text-cyan-300 outline-none w-32 border-b border-transparent focus:border-cyan-700"
+              className="bg-transparent text-xs font-semibold text-[#9AC0C4] outline-none w-32 border-b border-transparent focus:border-[#7FAAB0]/50"
               title={`Rename hub (id: ${activeHubId})`}
             />
             <span className="text-[10px] text-zinc-500">{hubs.length} hubs</span>
             <div className="w-px h-4 bg-zinc-800" />
-            <button onClick={addHub} className="p-1 rounded text-zinc-400 hover:text-cyan-300 hover:bg-zinc-800/70 transition" title="New blank hub">
+            <button onClick={addHub} className="p-1 rounded text-zinc-400 hover:text-[#9AC0C4] hover:bg-zinc-800/70 transition" title="New blank hub">
               <Plus size={13} />
             </button>
-            <button onClick={() => duplicateHub(activeHubId)} className="p-1 rounded text-zinc-400 hover:text-cyan-300 hover:bg-zinc-800/70 transition" title="Duplicate this hub">
+            <button onClick={() => duplicateHub(activeHubId)} className="p-1 rounded text-zinc-400 hover:text-[#9AC0C4] hover:bg-zinc-800/70 transition" title="Duplicate this hub">
               <Copy size={13} />
             </button>
             <button onClick={() => deleteHub(activeHubId)} disabled={hubs.length <= 1} className="p-1 rounded text-zinc-400 hover:text-red-400 hover:bg-zinc-800/70 disabled:opacity-30 transition" title="Delete this hub">
               <Trash2 size={13} />
             </button>
             <div className="w-px h-4 bg-zinc-800" />
-            <button onClick={() => setMode("stack")} className="flex items-center gap-1 p-1 px-1.5 rounded text-cyan-400 hover:text-cyan-300 hover:bg-zinc-800/70 transition text-[10px] font-bold" title="Dive into the selected hub">
+            <button onClick={() => setMode("stack")} className="flex items-center gap-1 p-1 px-1.5 rounded text-[#7FAAB0] hover:text-[#9AC0C4] hover:bg-zinc-800/70 transition text-[10px] font-bold" title="Dive into the selected hub">
               <Layers size={13} /> Stack
             </button>
           </>
@@ -230,20 +231,20 @@ export default function LayersStackView() {
       >
         <defs>
           <radialGradient id="lsv-ambient" cx="50%" cy="45%" r="55%">
-            <stop offset="0%" stopColor="#0e7490" stopOpacity="0.10" />
-            <stop offset="60%" stopColor="#4c1d95" stopOpacity="0.05" />
+            <stop offset="0%" stopColor="#3f5f66" stopOpacity="0.08" />
+            <stop offset="60%" stopColor="#4a3f5f" stopOpacity="0.04" />
             <stop offset="100%" stopColor="#000" stopOpacity="0" />
           </radialGradient>
           <linearGradient id="lsv-bridge" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#22d3ee" />
-            <stop offset="100%" stopColor="#a78bfa" />
+            <stop offset="0%" stopColor={MUTED_COLORS.cyan} />
+            <stop offset="100%" stopColor={MUTED_COLORS.purple} />
           </linearGradient>
           <linearGradient id="lsv-fed" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#e879f9" />
-            <stop offset="100%" stopColor="#22d3ee" />
+            <stop offset="0%" stopColor={MUTED_COLORS.fuchsia} />
+            <stop offset="100%" stopColor={MUTED_COLORS.cyan} />
           </linearGradient>
           <filter id="lsv-glow" x="-60%" y="-60%" width="220%" height="220%">
-            <feDropShadow dx="0" dy="0" stdDeviation="4" floodColor="#22d3ee" floodOpacity="0.7" />
+            <feDropShadow dx="0" dy="0" stdDeviation="3" floodColor={MUTED_COLORS.cyan} floodOpacity="0.45" />
           </filter>
           <style>{`
             .lsv-flow { stroke-dasharray: 5 9; animation: lsvFlow 1.4s linear infinite; }
@@ -286,12 +287,12 @@ export default function LayersStackView() {
                 >
                   <path
                     d={`M ${c00.x} ${c00.y} L ${c10.x} ${c10.y} L ${c11.x} ${c11.y} L ${c01.x} ${c01.y} Z`}
-                    fill={selected ? "rgba(34,211,238,0.045)" : "rgba(255,255,255,0.02)"}
-                    stroke={selected ? "rgba(34,211,238,0.55)" : "rgba(120,130,150,0.28)"}
+                    fill={selected ? "rgba(127,170,176,0.04)" : "rgba(255,255,255,0.02)"}
+                    stroke={selected ? "rgba(127,170,176,0.45)" : "rgba(120,130,150,0.24)"}
                     strokeWidth={selected ? 1.4 : 0.8}
                     filter={selected ? "url(#lsv-glow)" : undefined}
                   />
-                  <text x={c00.x} y={c00.y - 10} fontSize={selected ? 15 : 12} fontWeight={600} fill={selected ? "#a5f3fc" : "#71717a"}>
+                  <text x={c00.x} y={c00.y - 10} fontSize={selected ? 15 : 12} fontWeight={600} fill={selected ? "#B9D3D6" : "#71717a"}>
                     {layer.name}
                   </text>
 
@@ -310,7 +311,7 @@ export default function LayersStackView() {
                         key={e.id}
                         d={`M ${p1.x} ${p1.y} Q ${mx} ${my} ${p2.x} ${p2.y}`}
                         fill="none"
-                        stroke={trig ? "#f59e0b" : "#38bdf8"}
+                        stroke={trig ? MUTED_COLORS.amber : MUTED_COLORS.blue}
                         strokeWidth={selected ? 1.6 : 1}
                         opacity={selected ? 0.85 : 0.6}
                       />
@@ -326,8 +327,8 @@ export default function LayersStackView() {
                     if (!selected) {
                       return (
                         <g key={n.id}>
-                          {bridged && <circle cx={p.x} cy={p.y} r={8} fill="none" stroke="#22d3ee" strokeWidth={1} opacity={0.8} />}
-                          {federated && <circle cx={p.x} cy={p.y} r={11} fill="none" stroke="#e879f9" strokeWidth={1} opacity={0.8} strokeDasharray="3 3" />}
+                          {bridged && <circle cx={p.x} cy={p.y} r={8} fill="none" stroke={MUTED_COLORS.cyan} strokeWidth={1} opacity={0.7} />}
+                          {federated && <circle cx={p.x} cy={p.y} r={11} fill="none" stroke={MUTED_COLORS.fuchsia} strokeWidth={1} opacity={0.7} strokeDasharray="3 3" />}
                           <circle cx={p.x} cy={p.y} r={4.5} fill={color} opacity={0.9} />
                         </g>
                       );
@@ -337,10 +338,10 @@ export default function LayersStackView() {
                     return (
                       <g key={n.id}>
                         {bridged && (
-                          <rect x={p.x - bw / 2 - 4} y={p.y - bh / 2 - 4} width={bw + 8} height={bh + 8} rx={7} fill="none" stroke="#22d3ee" strokeWidth={1.2} opacity={0.85} filter="url(#lsv-glow)" />
+                          <rect x={p.x - bw / 2 - 4} y={p.y - bh / 2 - 4} width={bw + 8} height={bh + 8} rx={7} fill="none" stroke={MUTED_COLORS.cyan} strokeWidth={1.2} opacity={0.75} filter="url(#lsv-glow)" />
                         )}
                         {federated && (
-                          <rect x={p.x - bw / 2 - 8} y={p.y - bh / 2 - 8} width={bw + 16} height={bh + 16} rx={9} fill="none" stroke="#e879f9" strokeWidth={1.2} opacity={0.85} strokeDasharray="4 4" />
+                          <rect x={p.x - bw / 2 - 8} y={p.y - bh / 2 - 8} width={bw + 16} height={bh + 16} rx={9} fill="none" stroke={MUTED_COLORS.fuchsia} strokeWidth={1.2} opacity={0.75} strokeDasharray="4 4" />
                         )}
                         <rect x={p.x - bw / 2} y={p.y - bh / 2} width={bw} height={bh} rx={5} fill="#0c0c10" stroke={color} strokeWidth={1.3} />
                         <circle cx={p.x - bw / 2 + 8} cy={p.y} r={2.6} fill={color} />
@@ -368,12 +369,12 @@ export default function LayersStackView() {
                 const d = `M ${pa.x} ${pa.y} C ${pa.x + bow} ${pa.y - 22}, ${pb.x + bow} ${pb.y + 22}, ${pb.x} ${pb.y}`;
                 return (
                   <g key={`br_${gi}_${i}`} pointerEvents="none">
-                    <path d={d} fill="none" stroke="url(#lsv-bridge)" strokeWidth={2} opacity={0.9} filter="url(#lsv-glow)" className="lsv-flow" />
-                    <circle r={3.2} fill="#67e8f9" filter="url(#lsv-glow)">
+                    <path d={d} fill="none" stroke="url(#lsv-bridge)" strokeWidth={1.8} opacity={0.75} filter="url(#lsv-glow)" className="lsv-flow" />
+                    <circle r={3} fill={MUTED_COLORS.cyan} filter="url(#lsv-glow)">
                       <animateMotion dur="2.6s" repeatCount="indefinite" path={d} />
                     </circle>
-                    <circle cx={pa.x} cy={pa.y} r={3.4} fill="#22d3ee" opacity={0.9} />
-                    <circle cx={pb.x} cy={pb.y} r={3.4} fill="#a78bfa" opacity={0.9} />
+                    <circle cx={pa.x} cy={pa.y} r={3.2} fill={MUTED_COLORS.cyan} opacity={0.8} />
+                    <circle cx={pb.x} cy={pb.y} r={3.2} fill={MUTED_COLORS.purple} opacity={0.8} />
                   </g>
                 );
               })

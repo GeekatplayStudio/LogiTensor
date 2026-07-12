@@ -89,7 +89,7 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
       >
         <button
           onClick={handleManualTrigger}
-          className="w-6 h-6 rounded-full bg-amber-500 hover:bg-amber-400 text-zinc-950 flex items-center justify-center transition active:scale-95 shadow-[0_0_8px_rgba(245,158,11,0.4)]"
+          className="w-6 h-6 rounded-full bg-[#B99B72] hover:bg-[#C7AC85] text-zinc-950 flex items-center justify-center transition active:scale-95 shadow-[0_0_6px_rgba(185,155,114,0.35)]"
           title="Trigger execution flow"
         >
           <Play size={10} fill="currentColor" className="ml-0.5" />
@@ -105,12 +105,12 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
             width: "11px",
             height: "11px",
             right: "-6px",
-            background: connected ? "#f59e0b" : "#09090b",
-            border: "2px solid #f59e0b",
+            background: connected ? "#B99B72" : "#09090b",
+            border: "2px solid #B99B72",
             borderRadius: "50%",
             transition: "all 0.1s ease",
           }}
-          className="hover:scale-125 hover:shadow-[0_0_8px_rgba(245,158,11,0.6)] cursor-pointer"
+          className="hover:scale-125 hover:shadow-[0_0_6px_rgba(185,155,114,0.5)] cursor-pointer"
           title="Trigger Output (Out): Fires execution signal to run next node.&#10;Right-click to disconnect."
           onContextMenu={(e) => {
             e.preventDefault();
@@ -133,9 +133,9 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
   const isMultiDim = !!data.config?.isMultiDimensional;
   const isFederated = !!data.config?.isFederated;
   const multiDimBorder = isMultiDim
-    ? "border-cyan-400 shadow-[0_0_18px_rgba(34,211,238,0.25)] bg-gradient-to-b from-cyan-950/20 to-zinc-950/95"
+    ? "border-[#7FAAB0] shadow-[0_0_12px_rgba(127,170,176,0.2)] bg-gradient-to-b from-[#7FAAB0]/10 to-zinc-950/95"
     : `${categoryStyles.border} ${categoryStyles.accent}`;
-  const federatedGlow = isFederated ? "shadow-[0_0_18px_rgba(217,70,239,0.3)]" : "";
+  const federatedGlow = isFederated ? "shadow-[0_0_12px_rgba(173,139,176,0.22)]" : "";
 
   return (
     <div
@@ -157,7 +157,7 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
               onClick={() => toggleNodeMultiDimensional(id)}
               className={`p-1 rounded hover:bg-zinc-800/80 transition active:scale-90 ${
                 isMultiDim
-                  ? "text-cyan-400 bg-cyan-950/30 hover:text-cyan-300"
+                  ? "text-[#7FAAB0] bg-[#7FAAB0]/10 hover:text-[#9AC0C4]"
                   : "text-zinc-500 hover:text-zinc-300"
               }`}
               title={
@@ -182,7 +182,7 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
               onClick={() => toggleNodeFederated(id)}
               className={`p-1 rounded hover:bg-zinc-800/80 transition active:scale-90 ${
                 isFederated
-                  ? "text-fuchsia-400 bg-fuchsia-950/30 hover:text-fuchsia-300"
+                  ? "text-[#AD8BB0] bg-[#AD8BB0]/10 hover:text-[#C4A8C6]"
                   : "text-zinc-500 hover:text-zinc-300"
               }`}
               title={
@@ -197,7 +197,7 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
           {type === "triggerInput" && (
             <button
               onClick={handleManualTrigger}
-              className="p-1 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 transition active:scale-95 shadow-[0_0_8px_rgba(245,158,11,0.4)]"
+              className="p-1 rounded bg-[#B99B72] hover:bg-[#C7AC85] text-zinc-950 transition active:scale-95 shadow-[0_0_6px_rgba(185,155,114,0.35)]"
               title="Trigger flow"
             >
               <Play size={10} fill="currentColor" />
@@ -300,7 +300,7 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
                 {/* Current Value Preview */}
                 {output.type === "data" && output.value !== undefined && (
                   <span
-                    className="max-w-[70px] truncate text-[9px] font-mono font-bold bg-zinc-900 text-emerald-400 border border-zinc-800/80 px-1 py-0.2 rounded"
+                    className="max-w-[70px] truncate text-[9px] font-mono font-bold bg-zinc-900 text-[#8FBFA5] border border-zinc-800/80 px-1 py-0.2 rounded"
                     title={formatDisplayValue(output.value)}
                   >
                     {formatDisplayValue(output.value)}
@@ -371,7 +371,7 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
           {/* Response Output Display Container */}
           {data.outputs.find((o: any) => o.id === "response")?.value && (
             <div className="p-2.5 bg-zinc-950 border border-zinc-900 rounded-lg max-h-36 overflow-y-auto scrollbar-thin shadow-inner animate-fade-in">
-              <span className="text-[9px] font-bold text-violet-400 uppercase tracking-widest block mb-1">Ollama Output</span>
+              <span className="text-[9px] font-bold text-[#AC9BC4] uppercase tracking-widest block mb-1">Ollama Output</span>
               <p className="text-[10px] text-zinc-300 font-medium whitespace-pre-wrap leading-relaxed select-text">
                 {data.outputs.find((o: any) => o.id === "response")?.value}
               </p>
@@ -399,7 +399,7 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
 
       {/* Error Message display if any */}
       {data.executionState === "error" && data.errorMessage && (
-        <div className="flex items-start gap-1.5 border-t border-red-500/20 px-3 py-1.5 bg-red-950/20 text-[10px] text-red-400 rounded-b-xl leading-tight">
+        <div className="flex items-start gap-1.5 border-t border-[#B57676]/20 px-3 py-1.5 bg-[#B57676]/10 text-[10px] text-[#C99A9A] rounded-b-xl leading-tight">
           <AlertCircle size={10} className="shrink-0 mt-0.5" />
           <span className="break-all">{data.errorMessage}</span>
         </div>

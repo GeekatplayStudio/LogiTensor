@@ -3,6 +3,7 @@
 import React, { useMemo } from "react";
 import { Hub } from "./use-node-editor-store";
 import { Camera, project } from "@/lib/stack-3d-math";
+import { MUTED_COLORS } from "@/lib/node-styles";
 
 // Renders the zoomed-out Federation level: every hub as a wireframe cube with
 // its layers visible as glass slices inside, linked by glowing channel curves
@@ -83,7 +84,7 @@ export default function FederationScene({ cam, hubs, activeHubId, onSelectHub, o
     const { hub, cx, cy, cz } = pose;
     const active = hub.id === activeHubId;
     const h = CUBE_HALF * (active ? 1.12 : 1);
-    const stroke = active ? "rgba(34,211,238,0.85)" : "rgba(148,163,184,0.4)";
+    const stroke = active ? "rgba(127,170,176,0.6)" : "rgba(148,163,184,0.32)";
 
     const faceEls = FACES.map((face, fi) => {
       const pts = face.map(([mx, my, mz]) => project(cx + mx * h, cy + my * h, cz + mz * h, cam));
@@ -125,16 +126,16 @@ export default function FederationScene({ cam, hubs, activeHubId, onSelectHub, o
           <path
             key={f.fi}
             d={f.d}
-            fill={active ? "rgba(34,211,238,0.045)" : "rgba(255,255,255,0.02)"}
+            fill={active ? "rgba(127,170,176,0.04)" : "rgba(255,255,255,0.02)"}
             stroke={stroke}
             strokeWidth={active ? 1.4 : 0.9}
             filter={active ? "url(#lsv-glow)" : undefined}
           />
         ))}
         {slices.map((d, j) => (
-          <path key={j} d={d} fill="rgba(34,211,238,0.05)" stroke="rgba(103,232,249,0.4)" strokeWidth={0.8} />
+          <path key={j} d={d} fill="rgba(127,170,176,0.04)" stroke="rgba(127,170,176,0.3)" strokeWidth={0.8} />
         ))}
-        <text x={top.x} y={top.y} textAnchor="middle" fontSize={active ? 16 : 13} fontWeight={600} fill={active ? "#a5f3fc" : "#94a3b8"}>
+        <text x={top.x} y={top.y} textAnchor="middle" fontSize={active ? 16 : 13} fontWeight={600} fill={active ? "#B9D3D6" : "#94a3b8"}>
           {hub.name}
         </text>
         <text x={top.x} y={top.y + 15} textAnchor="middle" fontSize={9.5} fill="#64748b">
@@ -158,11 +159,11 @@ export default function FederationScene({ cam, hubs, activeHubId, onSelectHub, o
         const d = `M ${p1.x} ${p1.y} Q ${qx} ${qy} ${p2.x} ${p2.y}`;
         return (
           <g key={`fed_${i}`} pointerEvents="none">
-            <path d={d} fill="none" stroke="url(#lsv-fed)" strokeWidth={2} opacity={0.9} filter="url(#lsv-glow)" className="lsv-flow" />
-            <circle r={3.4} fill="#f0abfc" filter="url(#lsv-glow)">
+            <path d={d} fill="none" stroke="url(#lsv-fed)" strokeWidth={1.8} opacity={0.75} filter="url(#lsv-glow)" className="lsv-flow" />
+            <circle r={3.2} fill={MUTED_COLORS.fuchsia} filter="url(#lsv-glow)">
               <animateMotion dur="3s" repeatCount="indefinite" path={d} />
             </circle>
-            <text x={qx} y={qy + 58} textAnchor="middle" fontSize={9.5} fontWeight={600} fill="#e879f9" opacity={0.85}>
+            <text x={qx} y={qy + 58} textAnchor="middle" fontSize={9.5} fontWeight={600} fill={MUTED_COLORS.fuchsia} opacity={0.85}>
               {link.channel}
             </text>
           </g>

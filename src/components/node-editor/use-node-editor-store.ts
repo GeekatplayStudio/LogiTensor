@@ -626,15 +626,7 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
       }
 
       const isTrigger = sourcePort.type === "trigger";
-      const edgeColor = isTrigger 
-        ? "#f59e0b" 
-        : sourcePort.dataType === "number" 
-        ? "#10b981" 
-        : sourcePort.dataType === "boolean" 
-        ? "#14b8a6" 
-        : sourcePort.dataType === "string" 
-        ? "#a78bfa" 
-        : "#3b82f6";
+      const edgeColor = getPortColor(sourcePort.type, sourcePort.dataType);
 
       const connectionWithStyle = {
         ...connection,
@@ -1160,7 +1152,7 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
                     ...edge,
                     animated: true,
                     style: {
-                      stroke: "#f59e0b",
+                      stroke: getPortColor("trigger"),
                       strokeWidth: 3,
                       opacity: 1.0,
                     },

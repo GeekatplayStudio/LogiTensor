@@ -13,6 +13,7 @@ import "@xyflow/react/dist/style.css";
 import { useNodeEditorStore } from "./use-node-editor-store";
 import { nodeTypes } from "./custom-nodes";
 import RadialMenu from "./radial-menu";
+import { MUTED_COLORS } from "@/lib/node-styles";
 
 function FlowCanvas() {
   const nodes = useNodeEditorStore((state) => state.nodes);
@@ -71,7 +72,7 @@ function FlowCanvas() {
 
   // Custom connection line style (curved, glowing, thin)
   const connectionLineStyle = {
-    stroke: "#f59e0b",
+    stroke: MUTED_COLORS.amber,
     strokeWidth: 2,
     strokeDasharray: "4,4",
   };
@@ -101,12 +102,12 @@ function FlowCanvas() {
         <MiniMap
           style={{ background: "#09090b", border: "1px solid #27272a" }}
           nodeColor={(n) => {
-            if (["triggerInput", "constNum", "constBool", "constString"].includes(n.type || "")) return "#3b82f6";
-            if (["ifElseTrigger", "condValue", "delayNode", "counterNode", "forLoopNode", "whileLoopNode"].includes(n.type || "")) return "#a855f7";
-            if (["compareNode", "expressionNode", "mathNode", "mathFunctionNode", "randomNode"].includes(n.type || "")) return "#f59e0b";
-            if (["filterNode", "stringOpNode", "replaceTextNode"].includes(n.type || "")) return "#10b981";
-            if (["loggerNode", "textOutputNode"].includes(n.type || "")) return "#f43f5e";
-            return "#14b8a6";
+            if (["triggerInput", "constNum", "constBool", "constString"].includes(n.type || "")) return MUTED_COLORS.blue;
+            if (["ifElseTrigger", "condValue", "delayNode", "counterNode", "forLoopNode", "whileLoopNode"].includes(n.type || "")) return MUTED_COLORS.purple;
+            if (["compareNode", "expressionNode", "mathNode", "mathFunctionNode", "randomNode"].includes(n.type || "")) return MUTED_COLORS.amber;
+            if (["filterNode", "stringOpNode", "replaceTextNode"].includes(n.type || "")) return MUTED_COLORS.emerald;
+            if (["loggerNode", "textOutputNode"].includes(n.type || "")) return MUTED_COLORS.rose;
+            return MUTED_COLORS.teal;
           }}
           maskColor="rgba(9, 9, 11, 0.7)"
         />
