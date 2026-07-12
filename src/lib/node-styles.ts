@@ -14,6 +14,7 @@ export const MUTED_COLORS = {
   cyan: "#7FAAB0", // multi-dimensional bridge accent
   fuchsia: "#AD8BB0", // federation accent
   red: "#B57676", // error state
+  indigo: "#8686AD", // Neural Network
 } as const;
 
 /**
@@ -71,6 +72,16 @@ export const getCategoryStyles = (category: string, selected: boolean) => {
       headerBg: "bg-[#9483AD]/35 text-zinc-50 border-[#9483AD]/40",
       border: selected ? "border-[#9483AD] shadow-[0_0_12px_rgba(148,131,173,0.3)]" : "border-zinc-700",
       accent: "bg-[#9483AD]",
+    },
+    "Neural Network": {
+      headerBg: "bg-[#8686AD]/35 text-zinc-50 border-[#8686AD]/40",
+      border: selected ? "border-[#8686AD] shadow-[0_0_12px_rgba(134,134,173,0.3)]" : "border-zinc-700",
+      accent: "bg-[#8686AD]",
+    },
+    "AI Model": {
+      headerBg: "bg-[#7FAAB0]/35 text-zinc-50 border-[#7FAAB0]/40",
+      border: selected ? "border-[#7FAAB0] shadow-[0_0_12px_rgba(127,170,176,0.3)]" : "border-zinc-700",
+      accent: "bg-[#7FAAB0]",
     },
   };
   return styles[category] || styles.Logic;

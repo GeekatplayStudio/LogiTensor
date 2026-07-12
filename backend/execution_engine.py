@@ -29,6 +29,7 @@ ACTIVE_TYPES = {
     "forLoopNode",
     "whileLoopNode",
     "randomNode",
+    "leakyIntegrateFire",
 }
 
 LOOP_TYPES = {"forLoopNode", "whileLoopNode"}
@@ -37,7 +38,7 @@ LOOP_TYPES = {"forLoopNode", "whileLoopNode"}
 def _is_trigger_handle(handle) -> bool:
     return bool(handle) and (
         str(handle).endswith("Trigger")
-        or handle in ("triggerOut", "outTrigger", "onTrue", "onFalse", "done", "loopBody")
+        or handle in ("triggerOut", "outTrigger", "onTrue", "onFalse", "done", "loopBody", "spike")
     )
 
 
@@ -162,10 +163,75 @@ def resolve_inputs(node_id: str, state: GraphState) -> Dict[str, Any]:
             
     return inputs
 
+# Mirrors BYPASS_PORTS in src/lib/execution-helpers.ts: nodes with an Enabled
+# input skip their computation and pass their primary input straight to their
+# primary output when Enabled is false.
+BYPASS_PORTS = {
+    "andGate": ("a", "out"),
+    "orGate": ("a", "out"),
+    "notGate": ("a", "out"),
+    "xorGate": ("a", "out"),
+    "norGate": ("a", "out"),
+    "nandGate": ("a", "out"),
+    "compareNode": ("a", "out"),
+    "expressionNode": ("x", "out"),
+    "mathNode": ("a", "out"),
+    "mathFunctionNode": ("a", "out"),
+    "filterNode": ("value", "out"),
+    "stringOpNode": ("text", "out"),
+    "replaceTextNode": ("text", "out"),
+    "thresholdNeuron": ("value", "out"),
+    "maxSelectorNode": ("a", "out"),
+    "synapseNode": ("in", "out"),
+    "denseLayer": ("in", "out"),
+}
+
+
+def _mulberry32(seed: int):
+    """Bit-for-bit port of mulberry32 in src/lib/execution-helpers.ts, so a
+    Dense Layer's weight web is identical in the live preview and the /run
+    engine. Change one and you must change both."""
+    a = int(seed) & 0xFFFFFFFF
+
+    def rand() -> float:
+        nonlocal a
+        a = (a + 0x6D2B79F5) & 0xFFFFFFFF
+        t = a
+        t = ((t ^ (t >> 15)) * (t | 1)) & 0xFFFFFFFF
+        t = (((t + (((t ^ (t >> 7)) * (t | 61)) & 0xFFFFFFFF)) & 0xFFFFFFFF) ^ t) & 0xFFFFFFFF
+        return (t ^ (t >> 14)) / 4294967296
+
+    return rand
+
+
+def _generate_weights(seed: int, input_size: int, neurons: int):
+    """weights[neuron][input] in [-1, 1) — same generation order as the TS
+    generateWeights so both sides produce the same matrix."""
+    rand = _mulberry32(seed)
+    return [[rand() * 2 - 1 for _ in range(input_size)] for _ in range(neurons)]
+
+
+def _to_number_vector(v) -> list:
+    if not isinstance(v, list):
+        return []
+    out = []
+    for x in v:
+        try:
+            out.append(float(x))
+        except (TypeError, ValueError):
+            out.append(0.0)
+    return out
+
+
 def execute_logic_computation(node_type: str, inputs: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
     """
     Processes core logic and math operations.
     """
+    bypass = BYPASS_PORTS.get(node_type)
+    if bypass and inputs.get("enabled") is False:
+        primary_in, primary_out = bypass
+        return {primary_out: inputs.get(primary_in)}
+
     outputs = {}
     if node_type == "constNum":
         outputs["value"] = float(config.get("value", 0))
@@ -282,6 +348,65 @@ def execute_logic_computation(node_type: str, inputs: Dict[str, Any], config: Di
             outputs["value"] = random.randint(low, high)
         except Exception:
             outputs["value"] = 0
+    elif node_type == "thresholdNeuron":
+        value = float(inputs.get("value", 0) or 0)
+        threshold = float(inputs.get("threshold", 0) or 0)
+        mode = config.get("mode", "above")
+        fired = value < threshold if mode == "below" else value > threshold
+        outputs["fired"] = fired
+        outputs["out"] = value if fired else None
+    elif node_type == "maxSelectorNode":
+        vals = []
+        for v in inputs.values():
+            try:
+                vals.append(float(v))
+            except (TypeError, ValueError):
+                continue
+        outputs["out"] = max(vals) if vals else 0
+    elif node_type == "synapseNode":
+        weight = float(config.get("weight", 1) or 0)
+        signal = float(inputs.get("in", 0) or 0) * weight
+        outputs["out"] = -abs(signal) if config.get("inhibitory") else signal
+    elif node_type == "leakyIntegrateFire":
+        outputs["potential"] = float(config.get("potential", 0) or 0)
+    elif node_type == "imageInputGrid":
+        cell_values = config.get("cellValues", [])
+        outputs["values"] = list(cell_values) if isinstance(cell_values, list) else []
+    elif node_type == "denseLayer":
+        import math
+        xs = _to_number_vector(inputs.get("in"))
+        try:
+            neurons = max(1, min(64, int(float(config.get("neurons", 8) or 1))))
+        except (TypeError, ValueError):
+            neurons = 8
+        try:
+            seed = int(float(config.get("seed", 42) or 0))
+        except (TypeError, ValueError):
+            seed = 42
+        activation = config.get("activation", "sigmoid")
+        weights = _generate_weights(seed, len(xs), neurons)
+        # Normalize by sqrt(inputs) so activations stay in a useful range no
+        # matter the grid size feeding the layer (mirrors the TS side).
+        norm = max(1.0, math.sqrt(len(xs)))
+        out = []
+        for row in weights:
+            z = sum(w * x for w, x in zip(row, xs)) / norm
+            z = max(-60.0, min(60.0, z))
+            if activation == "relu":
+                out.append(max(0.0, z))
+            elif activation == "tanh":
+                out.append(math.tanh(z))
+            else:
+                out.append(1.0 / (1.0 + math.exp(-z)))
+        outputs["out"] = out
+    elif node_type == "outputLayerNode":
+        xs = _to_number_vector(inputs.get("in"))
+        outputs["out"] = xs
+        winner = -1
+        for i, v in enumerate(xs):
+            if winner == -1 or v > xs[winner]:
+                winner = i
+        outputs["winner"] = winner
     return outputs
 
 async def run_node_task(node_id: str, state: GraphState) -> GraphState:
@@ -378,6 +503,30 @@ async def run_node_task(node_id: str, state: GraphState) -> GraphState:
             # Values are updated on the frontend when trigger flow hits it.
             # Here we just resolve its output count.
             outputs["count"] = int(config.get("count", 0))
+
+        # 5.5. Leaky integrate-and-fire neuron: integrate Input into Potential
+        # (decayed by Leak each step), spiking and resetting once Threshold
+        # is crossed.
+        elif node_type == "leakyIntegrateFire" and inputs.get("enabled") is False:
+            # Bypassed: the neuron is frozen — no leak, no integration, no spike.
+            outputs["potential"] = float(config.get("potential", 0) or 0)
+            outputs["_spiked"] = False
+
+        elif node_type == "leakyIntegrateFire":
+            leak = min(max(float(config.get("leak", 0.2) or 0), 0.0), 1.0)
+            threshold = float(config.get("threshold", 1) or 0)
+            reset_value = float(config.get("resetValue", 0) or 0)
+            input_val = float(inputs.get("input", 0) or 0)
+            decayed = float(config.get("potential", 0) or 0) * (1 - leak)
+            potential = decayed + input_val
+            fired = potential >= threshold
+            node["data"]["config"] = {**config, "potential": reset_value if fired else potential}
+            outputs["potential"] = reset_value if fired else potential
+            outputs["_spiked"] = fired
+            state["logs"].append(
+                f"LIF neuron {node_id}: potential={potential:.3f} "
+                f"{'SPIKED' if fired else '(no spike)'}"
+            )
             
         # 6. Console Log collector
         elif node_type == "loggerNode":
@@ -487,6 +636,15 @@ async def run_trigger_chain(start_id: str, state: GraphState, max_steps: int = 5
                 (e for e in state["edges"] if e.get("source") == current and e.get("sourceHandle") == "done"),
                 None,
             )
+        elif ntype == "leakyIntegrateFire":
+            # Only continue down the Spike edge if the neuron actually fired
+            # this step — otherwise the chain stops here, like a real neuron
+            # that stays silent below threshold.
+            spiked = state["outputs"].get(current, {}).get("_spiked", False)
+            nxt = next(
+                (e for e in state["edges"] if e.get("source") == current and e.get("sourceHandle") == "spike"),
+                None,
+            ) if spiked else None
         else:
             nxt = next(
                 (
@@ -539,6 +697,8 @@ async def compile_and_run_graph(nodes_json: List[Any], edges_json: List[Any]) ->
         src_type = active_nodes_map[source]["type"]
         if src_type == "ifElseTrigger":
             continue
+        if src_type == "leakyIntegrateFire":
+            continue
         if src_type in LOOP_TYPES and edge.get("sourceHandle") != "done":
             continue
         plain_edges.append((source, target))
@@ -551,6 +711,15 @@ async def compile_and_run_graph(nodes_json: List[Any], edges_json: List[Any]) ->
         true_node = true_targets[0] if true_targets and true_targets[0] in graph_ids else None
         false_node = false_targets[0] if false_targets and false_targets[0] in graph_ids else None
         cond_specs.append((node_id, true_node, false_node))
+
+    # Spike edges from LIF neurons are single-branch conditionals: continue
+    # only when the neuron actually fired this step, otherwise stop the chain.
+    spike_specs = []
+    for node in [n for n in active_nodes if n["type"] == "leakyIntegrateFire" and n["id"] in graph_ids]:
+        node_id = node["id"]
+        spike_targets = [e["target"] for e in edges_json if e["source"] == node_id and e["sourceHandle"] == "spike"]
+        spike_node = spike_targets[0] if spike_targets and spike_targets[0] in graph_ids else None
+        spike_specs.append((node_id, spike_node))
 
     # 4. Entry points
     trigger_nodes = [n for n in active_nodes if n["type"] == "triggerInput" and n["id"] in graph_ids]
@@ -571,6 +740,9 @@ async def compile_and_run_graph(nodes_json: List[Any], edges_json: List[Any]) ->
         for t in (true_node, false_node):
             if t:
                 adjacency.setdefault(node_id, []).append(t)
+    for node_id, spike_node in spike_specs:
+        if spike_node:
+            adjacency.setdefault(node_id, []).append(spike_node)
 
     reachable = set()
     frontier = list(entries)
@@ -587,6 +759,10 @@ async def compile_and_run_graph(nodes_json: List[Any], edges_json: List[Any]) ->
     cond_specs = [
         (nid, t if t in graph_ids else None, f if f in graph_ids else None)
         for nid, t, f in cond_specs if nid in graph_ids
+    ]
+    spike_specs = [
+        (nid, s if s in graph_ids else None)
+        for nid, s in spike_specs if nid in graph_ids
     ]
 
     startup_logs = ["Graph compiled successfully. Starting execution."]
@@ -620,6 +796,20 @@ async def compile_and_run_graph(nodes_json: List[Any], edges_json: List[Any]) ->
             {
                 "true_path": true_node if true_node else END,
                 "false_path": false_node if false_node else END,
+            },
+        )
+
+    for node_id, spike_node in spike_specs:
+        def route_spike(state, nid=node_id):
+            spiked = state["outputs"].get(nid, {}).get("_spiked", False)
+            return "spike_path" if spiked else "no_spike"
+
+        workflow.add_conditional_edges(
+            node_id,
+            route_spike,
+            {
+                "spike_path": spike_node if spike_node else END,
+                "no_spike": END,
             },
         )
 

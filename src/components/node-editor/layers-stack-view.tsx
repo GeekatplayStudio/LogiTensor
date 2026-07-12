@@ -18,7 +18,7 @@ const PLANE_D = 520; // world-space plane depth (z)
 const LAYER_GAP = 112; // vertical distance between layers
 const PULL_X = 300; // selected layer slides out of the stack along +x
 
-const TRIGGER_HANDLES = new Set(["triggerOut", "outTrigger", "onTrue", "onFalse"]);
+const TRIGGER_HANDLES = new Set(["triggerOut", "outTrigger", "onTrue", "onFalse", "spike"]);
 const isTriggerHandle = (h?: string | null) =>
   !!h && (h.endsWith("Trigger") || TRIGGER_HANDLES.has(h));
 
@@ -30,6 +30,8 @@ function categoryColor(type?: string): string {
   if (["filterNode", "stringOpNode", "replaceTextNode"].includes(type)) return MUTED_COLORS.emerald;
   if (["loggerNode", "textOutputNode"].includes(type)) return MUTED_COLORS.rose;
   if (type === "pythonScript" || type.startsWith("ollama")) return MUTED_COLORS.violet;
+  if (["thresholdNeuron", "maxSelectorNode", "synapseNode", "leakyIntegrateFire"].includes(type)) return MUTED_COLORS.indigo;
+  if (["imageInputGrid", "denseLayer", "outputLayerNode"].includes(type)) return MUTED_COLORS.cyan;
   return MUTED_COLORS.teal;
 }
 

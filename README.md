@@ -46,12 +46,27 @@ Branded and developed by **Geekatplay Studio**.
   - *Python Script*: Executes sandboxed scripts. Injects inputs `x` and `y` and retrieves `result`.
   - *Ollama LLM*: Queries local models (e.g. `llama3`) with prompt templates.
   - *Ollama VLM*: Queries local vision models (e.g. `llava`) with prompts and image references.
+- **Neural Network**: Biologically-inspired computation nodes —
+  - *Threshold Neuron*: Fires (and passes its Value through) only when Value crosses a configurable Threshold; a switch picks Above or Below.
+  - *Max Selector*: Winner-take-all — auto-growing inputs (a, b, c…), outputs whichever connected value is highest, like lateral inhibition.
+  - *Synapse*: Scales a signal by a Weight; an Inhibitory switch flips the connection to subtract instead of add.
+  - *LIF Neuron*: A real leaky integrate-and-fire model — each Step adds Input to a membrane Potential that decays by Leak, firing Spike and resetting once Threshold is crossed.
+- **AI Model**: A small visual neural network you build and watch run —
+  - *Image Input Grid*: Upload an image and pixelate it onto an N×N grid (4×4 up to 32×32); each cell becomes the average color and luminosity of that region, forming the network's input vector.
+  - *Dense Layer*: A fully-connected layer — every incoming value feeds every neuron through its own weight, drawn live inside the node as the classic weight web (amber = positive, teal = negative, opacity by magnitude). Configurable neuron count, activation (Sigmoid/ReLU/Tanh), and a weight seed (weights are deterministically generated from the seed, identical on the frontend and the backend). Chain multiple Dense Layers for hidden layers.
+  - *Output Layer*: Renders each incoming activation as a bar and outputs the index of the strongest neuron (the winner).
+- **Enabled bypass**: Most computation nodes (Logic gates, Math & Compare, Data & Text, Neural Network) carry an `Enabled` boolean input (default `true`). Set it false — directly or by wiring in a boolean — and the node skips its own logic, passing its primary input straight through to its primary output instead, as if it weren't in the graph.
 
-### 6. Multi-Layer Sandbox Security
+### 6. Canvas Editing
+- **Multi-select**: Ctrl/Cmd+click to add nodes to a selection (native React Flow behavior — also works with a drag-select rectangle).
+- **Copy / Paste**: Ctrl/Cmd+C copies the selected nodes plus any wiring entirely within the selection; Ctrl/Cmd+V pastes them offset from the originals, freshly wired, and selected.
+- **Delete**: Delete/Backspace removes the selected node(s) along with their connected edges (and any multi-dimensional clones), skipped while typing in a text field so it never hijacks normal editing.
+
+### 7. Multi-Layer Sandbox Security
 - **Python AST Scanner**: Custom scripts are statically scanned using Python's Abstract Syntax Tree parser. Blocks dangerous modules (`os`, `sys`, `subprocess`, `requests`), builtins (`eval`, `exec`, `open`), and dunder properties.
 - **JS/Python Expression Sandbox**: Math and Formula nodes run a token-based Shunting-yard calculator, isolating execution threads from window/interpreter global spaces, mirrored identically on both the frontend and the backend.
 
-### 7. In-App Help & About
+### 8. In-App Help & About
 - A **Help** panel (top toolbar) walks through building flows, the node library, dimensions, the 3D stack, and federation.
 - An **About** panel carries the LogiTensor pitch and Geekatplay Studio background, plus a link back to this repository.
 
@@ -76,6 +91,8 @@ Launch Next.js (port 3000) and the FastAPI backend (port 8000) in parallel:
 npm run dev
 ```
 Open [http://localhost:3000](http://localhost:3000) in your browser. The page fills the browser window responsively (using dynamic viewport height) and reflows live as you resize it.
+
+If port 3000 or 8000 is already taken, the startup script automatically retries on the next port up (3001, 8001, …) and wires the frontend to whichever backend port actually started — no manual port-juggling required.
 
 ### Verification tests
 To verify front-end calculations and backend security scanners:

@@ -19,10 +19,16 @@ import { toast } from "sonner";
 let uniqueIdCounter = 0;
 const uniqueId = (prefix: string): string => `${prefix}_${Date.now()}_${uniqueIdCounter++}`;
 
+// Clipboard for node copy/paste (Ctrl/Cmd+C / Ctrl/Cmd+V). Lives outside the
+// store since it's a transient, non-reactive scratch buffer — no component
+// needs to re-render off it.
+let nodeClipboard: { nodes: Node<NodeData>[]; edges: Edge[] } | null = null;
+
 // Format edge label text previews
 const formatEdgeValue = (val: any): string => {
   if (val === null || val === undefined) return "";
   if (typeof val === "boolean") return val ? "true" : "false";
+  if (Array.isArray(val)) return `[${val.length} values]`;
   if (typeof val === "object") return "Object";
   const str = String(val);
   return str.length > 15 ? str.substring(0, 12) + "..." : str;
@@ -95,32 +101,40 @@ function resolveNodeInputs(
   return inputs;
 }
 
-// Keeps a Formula node's lettered inputs elastic: when every data input is
-// connected, a fresh letter appears; extra trailing unconnected letters are
-// trimmed back so exactly one spare input is always available (min a + b).
+// Keeps a node's lettered inputs elastic (any node with config.dynamicInputs,
+// e.g. Formula, Max Selector): when every data input is connected, a fresh
+// letter appears; extra trailing unconnected letters are trimmed back so
+// exactly one spare input is always available (min a + b).
 function adjustFormulaInputs(node: Node<NodeData>, edges: Edge[]): Node<NodeData> | null {
-  if (node.type !== "mathNode") return null;
+  if (!node.data.config?.dynamicInputs) return null;
   const connected = new Set(
     edges.filter((e) => e.target === node.id).map((e) => e.targetHandle)
   );
-  const inputs = [...node.data.inputs];
   const isConnected = (id: string) => connected.has(id);
+  const isLetterId = (id: string) => /^[a-z]$/.test(id);
 
-  // Trim trailing unconnected inputs down to one spare (never below 2 total)
+  // Non-lettered ports (like the Enabled bypass) sit outside the elastic
+  // lettered range and must not shift its length-based letter math.
+  const letters = node.data.inputs.filter((i) => isLetterId(i.id));
+  const otherInputs = node.data.inputs.filter((i) => !isLetterId(i.id));
+  const originalLetterCount = letters.length;
+
+  // Trim trailing unconnected letters down to one spare (never below 2 total)
   while (
-    inputs.length > 2 &&
-    !isConnected(inputs[inputs.length - 1].id) &&
-    !isConnected(inputs[inputs.length - 2].id)
+    letters.length > 2 &&
+    !isConnected(letters[letters.length - 1].id) &&
+    !isConnected(letters[letters.length - 2].id)
   ) {
-    inputs.pop();
+    letters.pop();
   }
-  // Grow when everything is connected
-  if (inputs.every((i) => isConnected(i.id)) && inputs.length < 26) {
-    const letter = String.fromCharCode(97 + inputs.length);
-    inputs.push({ id: letter, name: letter.toUpperCase(), type: "data", dataType: "any", value: 0 });
+  // Grow when every lettered input is connected
+  if (letters.every((i) => isConnected(i.id)) && letters.length < 26) {
+    const letter = String.fromCharCode(97 + letters.length);
+    letters.push({ id: letter, name: letter.toUpperCase(), type: "data", dataType: "any", value: 0 });
   }
 
-  if (inputs.length === node.data.inputs.length) return null;
+  if (letters.length === originalLetterCount) return null;
+  const inputs = [...letters, ...otherInputs];
   return { ...node, data: { ...node.data, inputs } };
 }
 
@@ -220,6 +234,9 @@ interface NodeEditorState {
   // Canvas Actions
   addNode: (type: string, x: number, y: number) => void;
   deleteNode: (id: string) => void;
+  deleteSelectedNodes: () => void;
+  copySelectedNodes: () => void;
+  pasteClipboard: () => void;
   clearBoard: () => void;
   updateNodeConfig: (id: string, config: Record<string, any>) => void;
   updateNodeInputStaticValue: (nodeId: string, inputId: string, value: any) => void;
@@ -747,6 +764,64 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
     toast.success("Node deleted");
   },
 
+  deleteSelectedNodes: () => {
+    const selectedIds = get().nodes.filter((n) => n.selected).map((n) => n.id);
+    if (selectedIds.length === 0) return;
+    selectedIds.forEach((id) => get().deleteNode(id));
+  },
+
+  copySelectedNodes: () => {
+    const { nodes, edges } = get();
+    const selected = nodes.filter((n) => n.selected);
+    if (selected.length === 0) return;
+    const selectedIds = new Set(selected.map((n) => n.id));
+    // Only bring along edges wired entirely within the copied selection —
+    // an edge to a node left behind would dangle after paste.
+    const internalEdges = edges.filter((e) => selectedIds.has(e.source) && selectedIds.has(e.target));
+    nodeClipboard = {
+      nodes: selected.map((n) => ({ ...n, data: { ...n.data } })),
+      edges: internalEdges.map((e) => ({ ...e })),
+    };
+    toast.success(`Copied ${selected.length} node${selected.length > 1 ? "s" : ""}`);
+  },
+
+  pasteClipboard: () => {
+    if (!nodeClipboard || nodeClipboard.nodes.length === 0) return;
+    const idMap = new Map<string, string>();
+    const pastedNodes = nodeClipboard.nodes.map((n) => {
+      const newId = `${n.type}_${Date.now()}_${uniqueIdCounter++}`;
+      idMap.set(n.id, newId);
+      return {
+        ...n,
+        id: newId,
+        selected: true,
+        position: { x: n.position.x + 40, y: n.position.y + 40 },
+        data: {
+          ...n.data,
+          executionState: "idle" as const,
+          errorMessage: undefined,
+        },
+      };
+    });
+    const pastedEdges = nodeClipboard.edges.map((e, idx) => ({
+      ...e,
+      id: uniqueId(`edge_${idx}`),
+      source: idMap.get(e.source) ?? e.source,
+      target: idMap.get(e.target) ?? e.target,
+      selected: false,
+    }));
+
+    set((state) => ({
+      nodes: [...state.nodes.map((n) => ({ ...n, selected: false })), ...pastedNodes],
+      edges: [...state.edges, ...pastedEdges],
+    }));
+
+    pastedNodes.forEach((n) => {
+      setTimeout(() => get().evaluateNode(n.id), 0);
+    });
+    toast.success(`Pasted ${pastedNodes.length} node${pastedNodes.length > 1 ? "s" : ""}`);
+  },
+
   clearBoard: () => {
     set({ nodes: [], edges: [] });
     toast.success("Board cleared");
@@ -1043,7 +1118,7 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
           }));
         }
 
-        if (currentTargetNode.type === "counterNode") {
+        if (currentTargetNode.type === "counterNode" || currentTargetNode.type === "leakyIntegrateFire") {
           get().evaluateNode(targetNodeId);
         }
       }
@@ -1116,7 +1191,8 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
           return l;
         });
 
-        const response = await fetch("http://localhost:8000/run", {
+        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const response = await fetch(`${apiBaseUrl}/run`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -1197,7 +1273,8 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
                                   edge.sourceHandle === "triggerOut" ||
                                   edge.sourceHandle === "outTrigger" ||
                                   edge.sourceHandle === "onTrue" ||
-                                  edge.sourceHandle === "onFalse";
+                                  edge.sourceHandle === "onFalse" ||
+                                  edge.sourceHandle === "spike";
 
                 if (isTrigger) {
                   return {

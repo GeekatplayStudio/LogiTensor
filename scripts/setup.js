@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 
 console.log("=========================================");
-console.log("       LogiBoard Development Setup       ");
+console.log("       LogiTensor Development Setup       ");
 console.log("=========================================\n");
 
 // 1. Install Node.js dependencies

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { getPortColor, getCategoryStyles, getExecutionStyles } from "@/lib/node-styles";
 import NodeConfigPanel from "./node-config-panel";
+import { ImageGridBody, DenseLayerBody, OutputLayerBody } from "./ai-model-node-parts";
 
 const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) => {
   const data = rawData as any;
@@ -21,7 +22,7 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
   const toggleNodeFederated = useNodeEditorStore((state) => state.toggleNodeFederated);
 
   // Style categories
-  let category: "Inputs" | "Logic" | "Control Flow" | "Math & Compare" | "Data & Text" | "Outputs" | "AI & Scripts" = "Logic";
+  let category: "Inputs" | "Logic" | "Control Flow" | "Math & Compare" | "Data & Text" | "Outputs" | "AI & Scripts" | "Neural Network" | "AI Model" = "Logic";
   if (["triggerInput", "constNum", "constBool", "constString"].includes(type || "")) {
     category = "Inputs";
   } else if (["ifElseTrigger", "condValue", "delayNode", "counterNode", "forLoopNode", "whileLoopNode"].includes(type || "")) {
@@ -34,6 +35,10 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
     category = "Outputs";
   } else if (["pythonScript", "ollamaLLM", "ollamaVLM"].includes(type || "")) {
     category = "AI & Scripts";
+  } else if (["thresholdNeuron", "maxSelectorNode", "synapseNode", "leakyIntegrateFire"].includes(type || "")) {
+    category = "Neural Network";
+  } else if (["imageInputGrid", "denseLayer", "outputLayerNode"].includes(type || "")) {
+    category = "AI Model";
   }
 
   const categoryStyles = getCategoryStyles(category, selected);
@@ -60,6 +65,7 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
   const formatDisplayValue = (val: any): string => {
     if (val === null || val === undefined) return "null";
     if (typeof val === "boolean") return val ? "true" : "false";
+    if (Array.isArray(val)) return `[${val.length} values]`;
     if (typeof val === "object") return "Object";
     return String(val);
   };
@@ -389,6 +395,13 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
         </div>
       )}
 
+      {/* AI Model visual bodies: image grid, weight web, activation bars */}
+      {type === "imageInputGrid" && (
+        <ImageGridBody data={data} onConfigChange={handleConfigChange} />
+      )}
+      {type === "denseLayer" && <DenseLayerBody id={id} data={data} />}
+      {type === "outputLayerNode" && <OutputLayerBody id={id} data={data} />}
+
       {type === "textOutputNode" && (
         <div className="px-3.5 pb-2.5 space-y-1">
           <Label className="text-[10px] text-zinc-400">Display Output</Label>
@@ -457,4 +470,11 @@ export const nodeTypes = {
   replaceTextNode: CustomNode,
   forLoopNode: CustomNode,
   whileLoopNode: CustomNode,
+  thresholdNeuron: CustomNode,
+  maxSelectorNode: CustomNode,
+  synapseNode: CustomNode,
+  leakyIntegrateFire: CustomNode,
+  imageInputGrid: CustomNode,
+  denseLayer: CustomNode,
+  outputLayerNode: CustomNode,
 };

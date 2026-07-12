@@ -228,6 +228,121 @@ export default function NodeConfigPanel({
         </div>
       )}
 
+      {type === "thresholdNeuron" && (
+        <div className="flex items-center justify-between py-1">
+          <span className="text-[10px] text-zinc-400">Fire when</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-zinc-500">{data.config?.mode === "below" ? "Below" : "Above"}</span>
+            <Switch
+              checked={data.config?.mode === "below"}
+              onCheckedChange={(val) => onConfigChange("mode", val ? "below" : "above")}
+            />
+          </div>
+        </div>
+      )}
+
+      {type === "maxSelectorNode" && (
+        <p className="text-[9px] text-zinc-600 leading-tight">
+          Inputs grow automatically (a, b, c…). Outputs whichever connected value is highest.
+        </p>
+      )}
+
+      {type === "synapseNode" && (
+        <div className="space-y-1.5">
+          <Label className="text-[10px] text-zinc-400">Weight</Label>
+          <Input
+            type="number"
+            step="0.1"
+            value={data.config?.weight ?? 1}
+            onChange={(e) => onConfigChange("weight", e.target.value === "" ? 0 : Number(e.target.value))}
+            className="h-7 text-xs bg-zinc-950 border-zinc-800 text-zinc-200"
+          />
+          <div className="flex items-center justify-between py-0.5">
+            <span className="text-[10px] text-zinc-400">Inhibitory</span>
+            <Switch
+              checked={!!data.config?.inhibitory}
+              onCheckedChange={(val) => onConfigChange("inhibitory", val)}
+            />
+          </div>
+        </div>
+      )}
+
+      {type === "leakyIntegrateFire" && (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between py-1 bg-zinc-950/40 px-2 rounded border border-zinc-900/60">
+            <span className="text-[10px] text-zinc-400 font-medium">Potential</span>
+            <span className="font-mono text-xs font-bold text-purple-400">
+              {Number(data.config?.potential ?? 0).toFixed(2)}
+            </span>
+          </div>
+          <Label className="text-[10px] text-zinc-400">Threshold</Label>
+          <Input
+            type="number"
+            step="0.1"
+            value={data.config?.threshold ?? 1}
+            onChange={(e) => onConfigChange("threshold", e.target.value === "" ? 0 : Number(e.target.value))}
+            className="h-7 text-xs bg-zinc-950 border-zinc-800 text-zinc-200"
+          />
+          <Label className="text-[10px] text-zinc-400">Leak (per step, 0–1)</Label>
+          <Input
+            type="number"
+            step="0.05"
+            value={data.config?.leak ?? 0.2}
+            onChange={(e) => onConfigChange("leak", e.target.value === "" ? 0 : Number(e.target.value))}
+            className="h-7 text-xs bg-zinc-950 border-zinc-800 text-zinc-200"
+          />
+          <Label className="text-[10px] text-zinc-400">Reset Value</Label>
+          <Input
+            type="number"
+            step="0.1"
+            value={data.config?.resetValue ?? 0}
+            onChange={(e) => onConfigChange("resetValue", e.target.value === "" ? 0 : Number(e.target.value))}
+            className="h-7 text-xs bg-zinc-950 border-zinc-800 text-zinc-200"
+          />
+        </div>
+      )}
+
+      {type === "denseLayer" && (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-[10px] text-zinc-400">Neurons</Label>
+            <Input
+              type="number"
+              min={1}
+              max={64}
+              value={data.config?.neurons ?? 8}
+              onChange={(e) => onConfigChange("neurons", e.target.value === "" ? 1 : Number(e.target.value))}
+              className="h-6 w-16 text-[10px] bg-zinc-950 border-zinc-800 text-zinc-200 py-0.5 px-1"
+            />
+          </div>
+          <Label className="text-[10px] text-zinc-400">Activation</Label>
+          <Select
+            value={data.config?.activation ?? "sigmoid"}
+            onValueChange={(val) => onConfigChange("activation", val)}
+          >
+            <SelectTrigger className="h-7 text-xs bg-zinc-950 border-zinc-800">
+              <SelectValue placeholder="Select activation" />
+            </SelectTrigger>
+            <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-200">
+              <SelectItem value="sigmoid">Sigmoid (0–1)</SelectItem>
+              <SelectItem value="relu">ReLU (max 0, z)</SelectItem>
+              <SelectItem value="tanh">Tanh (-1–1)</SelectItem>
+            </SelectContent>
+          </Select>
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-[10px] text-zinc-400" title="Weights are generated deterministically from this seed — same seed, same web.">
+              Weight Seed
+            </Label>
+            <Input
+              type="number"
+              value={data.config?.seed ?? 42}
+              onChange={(e) => onConfigChange("seed", e.target.value === "" ? 0 : Number(e.target.value))}
+              className="h-6 w-16 text-[10px] bg-zinc-950 border-zinc-800 text-zinc-200 py-0.5 px-1"
+            />
+          </div>
+        </div>
+      )}
+
       {type === "pythonScript" && (
         <div className="space-y-1">
           <Label className="text-[10px] text-zinc-400">Python Code</Label>

@@ -44,3 +44,6 @@ next-env.d.ts
 backend/.venv/
 **/__pycache__/
 *.pyc
+
+# local dev-tool config (per-machine)
+/.claude/

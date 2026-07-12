@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   ReactFlow,
   Background,
@@ -22,8 +22,39 @@ function FlowCanvas() {
   const onEdgesChange = useNodeEditorStore((state) => state.onEdgesChange);
   const onConnect = useNodeEditorStore((state) => state.onConnect);
   const addNode = useNodeEditorStore((state) => state.addNode);
+  const copySelectedNodes = useNodeEditorStore((state) => state.copySelectedNodes);
+  const pasteClipboard = useNodeEditorStore((state) => state.pasteClipboard);
+  const deleteSelectedNodes = useNodeEditorStore((state) => state.deleteSelectedNodes);
 
   const { screenToFlowPosition } = useReactFlow();
+
+  // Ctrl/Cmd+C, Ctrl/Cmd+V, Delete/Backspace for the selected node(s) — skipped
+  // while typing in a form field so it doesn't hijack normal text editing/copy.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isEditable =
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable);
+      if (isEditable) return;
+
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key.toLowerCase() === "c") {
+        e.preventDefault();
+        copySelectedNodes();
+      } else if (mod && e.key.toLowerCase() === "v") {
+        e.preventDefault();
+        pasteClipboard();
+      } else if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        deleteSelectedNodes();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [copySelectedNodes, pasteClipboard, deleteSelectedNodes]);
 
   const [radialMenu, setRadialMenu] = useState<{
     isOpen: boolean;
@@ -87,6 +118,7 @@ function FlowCanvas() {
         onConnect={onConnect}
         nodeTypes={nodeTypes}
         onPaneContextMenu={onPaneContextMenu}
+        deleteKeyCode={null}
         connectionLineType={ConnectionLineType.Bezier}
         connectionLineStyle={connectionLineStyle}
         defaultEdgeOptions={{
@@ -107,6 +139,8 @@ function FlowCanvas() {
             if (["compareNode", "expressionNode", "mathNode", "mathFunctionNode", "randomNode"].includes(n.type || "")) return MUTED_COLORS.amber;
             if (["filterNode", "stringOpNode", "replaceTextNode"].includes(n.type || "")) return MUTED_COLORS.emerald;
             if (["loggerNode", "textOutputNode"].includes(n.type || "")) return MUTED_COLORS.rose;
+            if (["thresholdNeuron", "maxSelectorNode", "synapseNode", "leakyIntegrateFire"].includes(n.type || "")) return MUTED_COLORS.indigo;
+            if (["imageInputGrid", "denseLayer", "outputLayerNode"].includes(n.type || "")) return MUTED_COLORS.cyan;
             return MUTED_COLORS.teal;
           }}
           maskColor="rgba(9, 9, 11, 0.7)"

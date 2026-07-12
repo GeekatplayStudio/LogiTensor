@@ -25,12 +25,18 @@ export interface NodeData extends Record<string, any> {
 export interface NodeDefinition {
   type: string;
   label: string;
-  category: "Inputs" | "Logic" | "Control Flow" | "Math & Compare" | "Data & Text" | "Outputs" | "AI & Scripts";
+  category: "Inputs" | "Logic" | "Control Flow" | "Math & Compare" | "Data & Text" | "Outputs" | "AI & Scripts" | "Neural Network" | "AI Model";
   description: string;
   inputs: PortDefinition[];
   outputs: PortDefinition[];
   config?: Record<string, any>;
 }
+
+// Appended to any node that supports the Enabled bypass: when wired/set to
+// false, the node skips its computation and passes its primary input straight
+// to its primary output instead (see BYPASS_PORTS in execution-helpers.ts and
+// its Python mirror in execution_engine.py).
+const ENABLED_INPUT: PortDefinition = { id: "enabled", name: "Enabled", type: "data", dataType: "boolean", value: true };
 
 export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
   // Inputs
@@ -79,6 +85,7 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     inputs: [
       { id: "a", name: "A", type: "data", dataType: "boolean", value: true },
       { id: "b", name: "B", type: "data", dataType: "boolean", value: true },
+      ENABLED_INPUT,
     ],
     outputs: [{ id: "out", name: "Out", type: "data", dataType: "boolean" }],
   },
@@ -90,6 +97,7 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     inputs: [
       { id: "a", name: "A", type: "data", dataType: "boolean", value: false },
       { id: "b", name: "B", type: "data", dataType: "boolean", value: false },
+      ENABLED_INPUT,
     ],
     outputs: [{ id: "out", name: "Out", type: "data", dataType: "boolean" }],
   },
@@ -98,7 +106,10 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     label: "NOT Gate",
     category: "Logic",
     description: "Logical NOT operation. Inverts the input boolean value.",
-    inputs: [{ id: "a", name: "A", type: "data", dataType: "boolean", value: false }],
+    inputs: [
+      { id: "a", name: "A", type: "data", dataType: "boolean", value: false },
+      ENABLED_INPUT,
+    ],
     outputs: [{ id: "out", name: "Out", type: "data", dataType: "boolean" }],
   },
   xorGate: {
@@ -109,6 +120,7 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     inputs: [
       { id: "a", name: "A", type: "data", dataType: "boolean", value: false },
       { id: "b", name: "B", type: "data", dataType: "boolean", value: false },
+      ENABLED_INPUT,
     ],
     outputs: [{ id: "out", name: "Out", type: "data", dataType: "boolean" }],
   },
@@ -120,6 +132,7 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     inputs: [
       { id: "a", name: "A", type: "data", dataType: "boolean", value: false },
       { id: "b", name: "B", type: "data", dataType: "boolean", value: false },
+      ENABLED_INPUT,
     ],
     outputs: [{ id: "out", name: "Out", type: "data", dataType: "boolean" }],
   },
@@ -131,6 +144,7 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     inputs: [
       { id: "a", name: "A", type: "data", dataType: "boolean", value: true },
       { id: "b", name: "B", type: "data", dataType: "boolean", value: true },
+      ENABLED_INPUT,
     ],
     outputs: [{ id: "out", name: "Out", type: "data", dataType: "boolean" }],
   },
@@ -244,6 +258,7 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     inputs: [
       { id: "a", name: "A", type: "data", dataType: "any", value: 1 },
       { id: "b", name: "B", type: "data", dataType: "any", value: 1 },
+      ENABLED_INPUT,
     ],
     outputs: [{ id: "out", name: "Result", type: "data", dataType: "any" }],
     config: { expression: "a + b", dynamicInputs: true },
@@ -256,6 +271,7 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     inputs: [
       { id: "a", name: "A", type: "data", dataType: "number", value: 0 },
       { id: "b", name: "B", type: "data", dataType: "number", value: 0 },
+      ENABLED_INPUT,
     ],
     outputs: [{ id: "out", name: "Result", type: "data", dataType: "number" }],
     config: { op: "abs" }, // abs | round | floor | ceil | sqrt | pow | min | max | mod
@@ -268,6 +284,7 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     inputs: [
       { id: "a", name: "A", type: "data", dataType: "number", value: 0 },
       { id: "b", name: "B", type: "data", dataType: "number", value: 0 },
+      ENABLED_INPUT,
     ],
     outputs: [{ id: "out", name: "Result", type: "data", dataType: "boolean" }],
     config: { op: ">" }, // options: ==, !=, >, >=, <, <=
@@ -280,6 +297,7 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     inputs: [
       { id: "x", name: "X", type: "data", dataType: "number", value: 1 },
       { id: "y", name: "Y", type: "data", dataType: "number", value: 1 },
+      ENABLED_INPUT,
     ],
     outputs: [{ id: "out", name: "Result", type: "data", dataType: "any" }],
     config: { expression: "x * 2 + y" },
@@ -294,6 +312,7 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     inputs: [
       { id: "value", name: "Value", type: "data", dataType: "any", value: "" },
       { id: "search", name: "Search", type: "data", dataType: "string", value: "" },
+      ENABLED_INPUT,
     ],
     outputs: [
       { id: "out", name: "Out", type: "data", dataType: "any" },
@@ -306,7 +325,10 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     label: "Text Transform",
     category: "Data & Text",
     description: "Transforms text: uppercase, lowercase, trim, length, or reverse.",
-    inputs: [{ id: "text", name: "Text", type: "data", dataType: "string", value: "" }],
+    inputs: [
+      { id: "text", name: "Text", type: "data", dataType: "string", value: "" },
+      ENABLED_INPUT,
+    ],
     outputs: [{ id: "out", name: "Out", type: "data", dataType: "any" }],
     config: { op: "uppercase" }, // uppercase | lowercase | trim | length | reverse
   },
@@ -319,6 +341,7 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
       { id: "text", name: "Text", type: "data", dataType: "string", value: "" },
       { id: "find", name: "Find", type: "data", dataType: "string", value: "" },
       { id: "replace", name: "Replace", type: "data", dataType: "string", value: "" },
+      ENABLED_INPUT,
     ],
     outputs: [{ id: "out", name: "Out", type: "data", dataType: "string" }],
   },
@@ -402,5 +425,100 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     config: {
       model: "llava",
     },
+  },
+
+  // Neural Network
+  thresholdNeuron: {
+    type: "thresholdNeuron",
+    label: "Threshold Neuron",
+    category: "Neural Network",
+    description: "Fires only when Value crosses the Threshold (above or below, set by the switch), passing Value through.",
+    inputs: [
+      { id: "threshold", name: "Threshold", type: "data", dataType: "number", value: 5 },
+      { id: "value", name: "Value", type: "data", dataType: "number", value: 0 },
+      ENABLED_INPUT,
+    ],
+    outputs: [
+      { id: "fired", name: "Fired", type: "data", dataType: "boolean" },
+      { id: "out", name: "Out", type: "data", dataType: "any" },
+    ],
+    config: { mode: "above" }, // above | below
+  },
+  maxSelectorNode: {
+    type: "maxSelectorNode",
+    label: "Max Selector",
+    category: "Neural Network",
+    description: "Winner-take-all: outputs the highest value among its auto-growing inputs (a, b, c…), like lateral inhibition picking the strongest signal.",
+    inputs: [
+      { id: "a", name: "A", type: "data", dataType: "number", value: 0 },
+      { id: "b", name: "B", type: "data", dataType: "number", value: 0 },
+      ENABLED_INPUT,
+    ],
+    outputs: [{ id: "out", name: "Max", type: "data", dataType: "number" }],
+    config: { dynamicInputs: true },
+  },
+  synapseNode: {
+    type: "synapseNode",
+    label: "Synapse",
+    category: "Neural Network",
+    description: "Scales a signal by a synaptic Weight; flip Inhibitory to make the connection subtract instead of add.",
+    inputs: [
+      { id: "in", name: "Signal", type: "data", dataType: "number", value: 0 },
+      ENABLED_INPUT,
+    ],
+    outputs: [{ id: "out", name: "Out", type: "data", dataType: "number" }],
+    config: { weight: 1, inhibitory: false },
+  },
+  leakyIntegrateFire: {
+    type: "leakyIntegrateFire",
+    label: "LIF Neuron",
+    category: "Neural Network",
+    description: "Leaky integrate-and-fire neuron: each Step adds Input to its membrane potential, which decays by Leak, then fires Spike and resets once Threshold is crossed. Enabled=false freezes the neuron (no integration, no spike).",
+    inputs: [
+      { id: "inTrigger", name: "Step", type: "trigger" },
+      { id: "input", name: "Input", type: "data", dataType: "number", value: 0 },
+      ENABLED_INPUT,
+    ],
+    outputs: [
+      { id: "spike", name: "Spike", type: "trigger" },
+      { id: "potential", name: "Potential", type: "data", dataType: "number" },
+    ],
+    config: { potential: 0, threshold: 1, leak: 0.2, resetValue: 0 },
+  },
+
+  // AI Model — visual mini neural network: image → dense layers → readout.
+  imageInputGrid: {
+    type: "imageInputGrid",
+    label: "Image Input Grid",
+    category: "AI Model",
+    description: "Upload an image and pixelate it onto an N×N grid — each cell becomes the average color and luminosity (0–1) of that region, forming the input layer of the network.",
+    inputs: [],
+    outputs: [{ id: "values", name: "Values", type: "data", dataType: "any" }],
+    // imageSrc holds a small downscaled copy so re-gridding works after reload;
+    // cellValues (luminosity vector) is what flows to downstream layers.
+    config: { gridSize: 8, cellValues: [], cellColors: [], imageSrc: "", imageName: "" },
+  },
+  denseLayer: {
+    type: "denseLayer",
+    label: "Dense Layer",
+    category: "AI Model",
+    description: "Fully-connected neuron layer: every incoming value feeds every neuron through its own weight — the classic AI weight web, drawn live inside the node. Outputs the activated neuron values.",
+    inputs: [
+      { id: "in", name: "Values In", type: "data", dataType: "any", value: [] },
+      ENABLED_INPUT,
+    ],
+    outputs: [{ id: "out", name: "Activations", type: "data", dataType: "any" }],
+    config: { neurons: 8, activation: "sigmoid", seed: 42 }, // sigmoid | relu | tanh
+  },
+  outputLayerNode: {
+    type: "outputLayerNode",
+    label: "Output Layer",
+    category: "AI Model",
+    description: "Final readout of the network: shows each incoming activation as a bar and outputs the index of the strongest neuron (the winner).",
+    inputs: [{ id: "in", name: "Activations", type: "data", dataType: "any", value: [] }],
+    outputs: [
+      { id: "out", name: "Values", type: "data", dataType: "any" },
+      { id: "winner", name: "Winner", type: "data", dataType: "number" },
+    ],
   },
 };

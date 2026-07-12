@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { NODE_DEFINITIONS } from "@/types/nodes";
 import { useNodeEditorStore } from "./use-node-editor-store";
 import { useReactFlow } from "@xyflow/react";
-import { HelpCircle, Layers, Cpu, CornerDownRight, X, BarChart, Settings, Brain, Filter } from "lucide-react";
+import { HelpCircle, Layers, Cpu, CornerDownRight, X, BarChart, Settings, Brain, Filter, Zap, LayoutGrid } from "lucide-react";
 
 interface RadialMenuProps {
   x: number;
@@ -19,7 +19,7 @@ export default function RadialMenu({ x, y, onClose, isOpen }: RadialMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Group definitions
-  const categories = ["Inputs", "Logic", "Control Flow", "Math & Compare", "Data & Text", "Outputs", "AI & Scripts"];
+  const categories = ["Inputs", "Logic", "Control Flow", "Math & Compare", "Data & Text", "Outputs", "AI & Scripts", "Neural Network", "AI Model"];
 
   const categoryIcons: Record<string, React.ReactNode> = {
     Inputs: <Layers size={14} />,
@@ -29,6 +29,8 @@ export default function RadialMenu({ x, y, onClose, isOpen }: RadialMenuProps) {
     "Data & Text": <Filter size={14} />,
     Outputs: <Settings size={14} />,
     "AI & Scripts": <Brain size={14} />,
+    "Neural Network": <Zap size={14} />,
+    "AI Model": <LayoutGrid size={14} />,
   };
 
   const categoryColors: Record<string, { bg: string; text: string; border: string; glow: string }> = {
@@ -73,6 +75,18 @@ export default function RadialMenu({ x, y, onClose, isOpen }: RadialMenuProps) {
       text: "text-[#BDB0CE]",
       border: "border-[#9483AD]/40",
       glow: "shadow-[0_0_8px_rgba(148,131,173,0.3)]",
+    },
+    "Neural Network": {
+      bg: "bg-[#8686AD]/15 hover:bg-[#8686AD]/25",
+      text: "text-[#B7B7CE]",
+      border: "border-[#8686AD]/40",
+      glow: "shadow-[0_0_8px_rgba(134,134,173,0.3)]",
+    },
+    "AI Model": {
+      bg: "bg-[#7FAAB0]/15 hover:bg-[#7FAAB0]/25",
+      text: "text-[#AECBCF]",
+      border: "border-[#7FAAB0]/40",
+      glow: "shadow-[0_0_8px_rgba(127,170,176,0.3)]",
     },
   };
 
