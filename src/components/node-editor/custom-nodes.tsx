@@ -271,20 +271,6 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
           </div>
         )}
 
-        {type === "delayNode" && (
-          <div className="space-y-1">
-            <Label className="text-[10px] text-zinc-400">Delay (ms)</Label>
-            <Input
-              type="number"
-              value={data.config?.delayMs ?? 1000}
-              onChange={(e) => handleConfigChange("delayMs", Number(e.target.value))}
-              className="h-7 text-xs bg-zinc-950 border-zinc-800 text-zinc-200"
-              min={0}
-              step={100}
-            />
-          </div>
-        )}
-
         {type === "counterNode" && (
           <div className="flex items-center justify-between py-1 bg-zinc-950/40 px-2 rounded border border-zinc-900/60">
             <span className="text-[10px] text-zinc-400 font-medium">Current Count</span>

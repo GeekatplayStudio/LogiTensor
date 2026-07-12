@@ -14,6 +14,11 @@ import { computeNodeOutputs, handleTriggerOperation } from "@/lib/execution-help
 import { getPortColor } from "@/lib/node-styles";
 import { toast } from "sonner";
 
+// Monotonic counter appended to Date.now()-based ids so two created in the same
+// millisecond (e.g. rapid double-clicks) never collide.
+let uniqueIdCounter = 0;
+const uniqueId = (prefix: string): string => `${prefix}_${Date.now()}_${uniqueIdCounter++}`;
+
 // Format edge label text previews
 const formatEdgeValue = (val: any): string => {
   if (val === null || val === undefined) return "";
@@ -22,6 +27,71 @@ const formatEdgeValue = (val: any): string => {
   const str = String(val);
   return str.length > 15 ? str.substring(0, 12) + "..." : str;
 };
+
+// Combines the same input port's value collected across every dimension instance
+// of a multi-dimensional node: numbers sum, booleans OR, strings join — otherwise
+// the first defined value wins. This is the "process as multiple inputs" rule.
+function combineDimensionValues(values: any[]): any {
+  const defined = values.filter((v) => v !== undefined && v !== null);
+  if (defined.length === 0) return null;
+  if (
+    defined.every(
+      (v) => typeof v === "number" || (typeof v === "string" && v.trim() !== "" && !isNaN(Number(v)))
+    )
+  ) {
+    return defined.reduce((sum: number, v) => sum + Number(v), 0);
+  }
+  if (defined.every((v) => typeof v === "boolean")) {
+    return defined.some((v) => v === true);
+  }
+  if (defined.every((v) => typeof v === "string")) {
+    return defined.join(" | ");
+  }
+  return defined[0];
+}
+
+// Resolves a node's data inputs against a specific node/edge list — used to evaluate
+// a shared multi-dimensional node's instance living in a different dimension/layer.
+function resolveNodeInputs(
+  node: Node<NodeData>,
+  nodeList: Node<NodeData>[],
+  edgeList: Edge[]
+): Record<string, any> {
+  const inputs: Record<string, any> = {};
+  for (const input of node.data.inputs) {
+    if (input.type === "trigger") continue;
+    const incomingEdge = edgeList.find((e) => e.target === node.id && e.targetHandle === input.id);
+    if (incomingEdge) {
+      const sourceNode = nodeList.find((n) => n.id === incomingEdge.source);
+      const sourcePort = sourceNode?.data.outputs.find((o) => o.id === incomingEdge.sourceHandle);
+      inputs[input.id] = sourcePort ? sourcePort.value : input.value;
+    } else {
+      inputs[input.id] = input.value;
+    }
+  }
+  return inputs;
+}
+
+// Writes computed output port values (and evaluation error state) onto a node.
+function applyComputedOutputs(
+  node: Node<NodeData>,
+  outputs: Record<string, any>,
+  executionState: "idle" | "error",
+  errorMessage: string | undefined
+): Node<NodeData> {
+  const updatedOutputs = node.data.outputs.map((outPort) =>
+    outputs[outPort.id] !== undefined ? { ...outPort, value: outputs[outPort.id] } : outPort
+  );
+  return {
+    ...node,
+    data: {
+      ...node.data,
+      outputs: updatedOutputs,
+      executionState: executionState === "error" ? "error" : node.data.executionState,
+      errorMessage,
+    },
+  };
+}
 
 export interface Layer {
   id: string;
@@ -44,6 +114,7 @@ interface NodeEditorState {
   activeLayerId: string;
   isLayersViewOpen: boolean;
   addLayer: () => void;
+  duplicateLayer: (id: string) => void;
   selectLayer: (id: string) => void;
   deleteLayer: (id: string) => void;
   setIsLayersViewOpen: (open: boolean) => void;
@@ -88,34 +159,84 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
   isLayersViewOpen: false,
   
   addLayer: () => {
-    const id = `layer_${Date.now()}`;
+    const id = uniqueId("layer");
     const count = get().layers.length + 1;
     const name = `Dimension ${String.fromCharCode(64 + count)}`; // Dimension B, C, etc.
     const newLayer: Layer = { id, name, nodes: [], edges: [] };
     set((state) => ({ layers: [...state.layers, newLayer] }));
     toast.success(`Created ${name}`);
   },
-  
+
+  duplicateLayer: (id) => {
+    const { layers, activeLayerId, nodes, edges } = get();
+    const sourceLayer = layers.find((l) => l.id === id);
+    if (!sourceLayer) return;
+
+    // Use live canvas state if duplicating the currently active layer
+    const sourceNodes = id === activeLayerId ? nodes : sourceLayer.nodes;
+    const sourceEdges = id === activeLayerId ? edges : sourceLayer.edges;
+
+    // Remap node/edge ids so the copy never collides with the original
+    // when both layers' nodes are merged for backend execution.
+    const idMap = new Map<string, string>();
+    const newNodes = sourceNodes.map((n, idx) => {
+      const newId = `${n.id}_copy${Date.now()}_${idx}`;
+      idMap.set(n.id, newId);
+      return { ...n, id: newId, selected: false };
+    });
+    const newEdges = sourceEdges.map((e, idx) => ({
+      ...e,
+      id: `edge_${Date.now()}_${idx}`,
+      source: idMap.get(e.source) ?? e.source,
+      target: idMap.get(e.target) ?? e.target,
+    }));
+
+    const newLayerId = uniqueId("layer");
+    const newLayer: Layer = {
+      id: newLayerId,
+      name: `${sourceLayer.name} Copy`,
+      nodes: newNodes,
+      edges: newEdges,
+    };
+
+    // Sync the active layer's live canvas state back into the layers array
+    // before appending, so the source layer isn't left stale.
+    const syncedLayers = layers.map((l) =>
+      l.id === activeLayerId ? { ...l, nodes, edges } : l
+    );
+
+    set({ layers: [...syncedLayers, newLayer] });
+    toast.success(`Duplicated "${sourceLayer.name}" to "${newLayer.name}"`);
+  },
+
   selectLayer: (id) => {
     const { activeLayerId, nodes, edges, layers } = get();
     if (activeLayerId === id) return;
-    
+
     const updatedLayers = layers.map((l) => {
       if (l.id === activeLayerId) {
         return { ...l, nodes, edges };
       }
       return l;
     });
-    
-    const target = layers.find((l) => l.id === id);
+
+    const target = updatedLayers.find((l) => l.id === id);
     if (!target) return;
-    
+
     set({
       layers: updatedLayers,
       activeLayerId: id,
       nodes: target.nodes,
       edges: target.edges,
     });
+
+    // Re-evaluate this layer's nodes so outputs broadcast from a multi-dimensional
+    // node in another layer correctly propagate downstream in the newly active one.
+    setTimeout(() => {
+      for (const n of get().nodes) {
+        get().evaluateNode(n.id);
+      }
+    }, 0);
   },
   
   deleteLayer: (id) => {
@@ -140,25 +261,132 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
     toast.success("Dimension collapsed.");
   },
   
-  setIsLayersViewOpen: (open) => set({ isLayersViewOpen: open }),
+  setIsLayersViewOpen: (open) => {
+    if (!open) {
+      set({ isLayersViewOpen: false });
+      return;
+    }
+    // Sync the active layer's live canvas state into `layers` before showing the
+    // deck, so its preview card reflects nodes added since the last layer switch.
+    const { activeLayerId, nodes, edges, layers } = get();
+    set({
+      layers: layers.map((l) => (l.id === activeLayerId ? { ...l, nodes, edges } : l)),
+      isLayersViewOpen: true,
+    });
+  },
   
   toggleNodeMultiDimensional: (nodeId) => {
-    set((state) => ({
-      nodes: state.nodes.map((n) => {
-        if (n.id === nodeId) {
-          const config = { ...n.data.config };
-          config.isMultiDimensional = !config.isMultiDimensional;
-          return {
-            ...n,
+    const { nodes, activeLayerId } = get();
+    const node = nodes.find((n) => n.id === nodeId);
+    if (!node) return;
+
+    const isCurrentlyMultiDim = !!node.data.config?.isMultiDimensional;
+
+    if (!isCurrentlyMultiDim) {
+      // Turning ON: stamp a shared id on this node and clone it into every other dimension.
+      const sharedId = `shared_${nodeId}`;
+
+      set((state) => ({
+        nodes: state.nodes.map((n) =>
+          n.id === nodeId
+            ? {
+                ...n,
+                data: {
+                  ...n.data,
+                  config: {
+                    ...n.data.config,
+                    isMultiDimensional: true,
+                    sharedId,
+                    isMultiDimOrigin: true,
+                    originLayerId: activeLayerId,
+                  },
+                },
+              }
+            : n
+        ),
+        layers: state.layers.map((l) => {
+          if (l.id === activeLayerId) return l;
+          if (l.nodes.some((n) => n.data.config?.sharedId === sharedId)) return l;
+          const clone: Node<NodeData> = {
+            ...node,
+            id: `${node.id}_dim_${l.id}`,
+            selected: false,
             data: {
-              ...n.data,
-              config,
+              ...node.data,
+              inputs: node.data.inputs.map((i) => ({ ...i })),
+              outputs: node.data.outputs.map((o) => ({ ...o })),
+              config: {
+                ...node.data.config,
+                isMultiDimensional: true,
+                sharedId,
+                isMultiDimOrigin: false,
+                originLayerId: activeLayerId,
+              },
             },
           };
+          return { ...l, nodes: [...l.nodes, clone] };
+        }),
+      }));
+
+      toast.success(`"${node.data.label}" is now synced across all dimensions`);
+    } else {
+      // Turning OFF: keep only the ORIGIN instance (wherever it lives) and remove
+      // every clone — regardless of which instance's checkbox was actually clicked.
+      const sharedId = node.data.config?.sharedId;
+      const originLayerId = node.data.config?.originLayerId ?? activeLayerId;
+      const isActiveLayerOrigin = originLayerId === activeLayerId;
+
+      const clearFlags = (n: Node<NodeData>) => ({
+        ...n,
+        data: {
+          ...n.data,
+          config: {
+            ...n.data.config,
+            isMultiDimensional: false,
+            sharedId: undefined,
+            isMultiDimOrigin: false,
+            originLayerId: undefined,
+          },
+        },
+      });
+
+      set((state) => {
+        const layers = state.layers.map((l) => {
+          if (l.id === activeLayerId || !sharedId) return l;
+          if (l.id === originLayerId) {
+            return {
+              ...l,
+              nodes: l.nodes.map((n) => (n.data.config?.sharedId === sharedId ? clearFlags(n) : n)),
+            };
+          }
+          const removedIds = new Set(
+            l.nodes.filter((n) => n.data.config?.sharedId === sharedId).map((n) => n.id)
+          );
+          if (removedIds.size === 0) return l;
+          return {
+            ...l,
+            nodes: l.nodes.filter((n) => !removedIds.has(n.id)),
+            edges: l.edges.filter((e) => !removedIds.has(e.source) && !removedIds.has(e.target)),
+          };
+        });
+
+        if (isActiveLayerOrigin) {
+          return {
+            layers,
+            nodes: state.nodes.map((n) => (n.id === nodeId ? clearFlags(n) : n)),
+          };
         }
-        return n;
-      }),
-    }));
+
+        // The active layer holds a clone, not the origin — drop this instance entirely.
+        return {
+          layers,
+          nodes: state.nodes.filter((n) => n.id !== nodeId),
+          edges: state.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
+        };
+      });
+
+      toast.success(`"${node.data.label}" now lives only in its original dimension`);
+    }
   },
 
   onNodesChange: (changes) => {
@@ -276,9 +504,26 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
   },
 
   deleteNode: (id) => {
+    const { nodes } = get();
+    const sharedId = nodes.find((n) => n.id === id)?.data.config?.sharedId;
+
     set((state) => ({
       nodes: state.nodes.filter((n) => n.id !== id),
       edges: state.edges.filter((e) => e.source !== id && e.target !== id),
+      // Deleting a multi-dimensional node's origin also removes its clones everywhere else.
+      layers: sharedId
+        ? state.layers.map((l) => {
+            const removedIds = new Set(
+              l.nodes.filter((n) => n.data.config?.sharedId === sharedId).map((n) => n.id)
+            );
+            if (removedIds.size === 0) return l;
+            return {
+              ...l,
+              nodes: l.nodes.filter((n) => !removedIds.has(n.id)),
+              edges: l.edges.filter((e) => !removedIds.has(e.source) && !removedIds.has(e.target)),
+            };
+          })
+        : state.layers,
     }));
     toast.success("Node deleted");
   },
@@ -337,69 +582,85 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
 
   // Evaluate a node's output data variables reactively
   evaluateNode: (nodeId) => {
-    const { nodes, edges } = get();
+    const { nodes, edges, layers, activeLayerId } = get();
     const node = nodes.find((n) => n.id === nodeId);
     if (!node) return;
 
-    // 1. Resolve inputs from incoming data connections or fall back to static/input values
-    const inputs: Record<string, any> = {};
-    for (const input of node.data.inputs) {
-      if (input.type === "trigger") continue; // Triggers are not evaluated as data
+    const sharedId = node.data.config?.isMultiDimensional ? node.data.config?.sharedId : null;
 
-      const incomingEdge = edges.find(
-        (e) => e.target === nodeId && e.targetHandle === input.id
-      );
-
-      if (incomingEdge) {
-        const sourceNode = nodes.find((n) => n.id === incomingEdge.source);
-        const sourcePort = sourceNode?.data.outputs.find(
-          (o) => o.id === incomingEdge.sourceHandle
-        );
-        inputs[input.id] = sourcePort ? sourcePort.value : input.value;
-      } else {
-        inputs[input.id] = input.value;
-      }
-    }
-
-    // 2. Perform the logic based on the node's type using the modular helpers
     let outputs: Record<string, any> = {};
     let executionState: "idle" | "error" = "idle";
     let errorMessage: string | undefined = undefined;
 
-    try {
-      outputs = computeNodeOutputs(node.type || "", inputs, node.data.config || {});
-    } catch (err: any) {
-      executionState = "error";
-      errorMessage = err.message || "Evaluation error";
+    if (sharedId) {
+      // Multi-dimensional node: gather this node's instance from every dimension
+      // (the active layer's instance comes from live state, others from `layers`).
+      const instances = layers
+        .map((l) => {
+          if (l.id === activeLayerId) {
+            const instance = nodes.find((n) => n.data.config?.sharedId === sharedId);
+            return instance ? { nodeList: nodes, edgeList: edges, instance } : null;
+          }
+          const instance = l.nodes.find((n) => n.data.config?.sharedId === sharedId);
+          return instance ? { nodeList: l.nodes, edgeList: l.edges, instance } : null;
+        })
+        .filter((x): x is { nodeList: Node<NodeData>[]; edgeList: Edge[]; instance: Node<NodeData> } => !!x);
+
+      // Combine each input port's value across every dimension's instance —
+      // this is the "process as multiple inputs" step (sum numbers, OR booleans, etc.)
+      const combinedInputs: Record<string, any> = {};
+      for (const inputDef of node.data.inputs) {
+        if (inputDef.type === "trigger") continue;
+        const values = instances.map(({ instance, nodeList, edgeList }) =>
+          resolveNodeInputs(instance, nodeList, edgeList)[inputDef.id]
+        );
+        combinedInputs[inputDef.id] = combineDimensionValues(values);
+      }
+
+      try {
+        outputs = computeNodeOutputs(node.type || "", combinedInputs, node.data.config || {});
+      } catch (err: any) {
+        executionState = "error";
+        errorMessage = err.message || "Evaluation error";
+      }
+
+      // Broadcast the single combined output onto every dimension's instance.
+      set((state) => ({
+        nodes: state.nodes.map((n) =>
+          n.data.config?.sharedId === sharedId
+            ? applyComputedOutputs(n, outputs, executionState, errorMessage)
+            : n
+        ),
+        layers: state.layers.map((l) => {
+          if (l.id === activeLayerId) return l;
+          return {
+            ...l,
+            nodes: l.nodes.map((n) =>
+              n.data.config?.sharedId === sharedId
+                ? applyComputedOutputs(n, outputs, executionState, errorMessage)
+                : n
+            ),
+          };
+        }),
+      }));
+    } else {
+      const inputs = resolveNodeInputs(node, nodes, edges);
+
+      try {
+        outputs = computeNodeOutputs(node.type || "", inputs, node.data.config || {});
+      } catch (err: any) {
+        executionState = "error";
+        errorMessage = err.message || "Evaluation error";
+      }
+
+      set((state) => ({
+        nodes: state.nodes.map((n) =>
+          n.id === nodeId ? applyComputedOutputs(n, outputs, executionState, errorMessage) : n
+        ),
+      }));
     }
 
-    // Update state
-    set((state) => ({
-      nodes: state.nodes.map((n) => {
-        if (n.id === nodeId) {
-          const updatedOutputs = n.data.outputs.map((outPort) => {
-            if (outputs[outPort.id] !== undefined) {
-              return { ...outPort, value: outputs[outPort.id] };
-            }
-            return outPort;
-          });
-
-          return {
-            ...n,
-            data: {
-              ...n.data,
-              outputs: updatedOutputs,
-              executionState:
-                executionState === "error" ? "error" : n.data.executionState,
-              errorMessage,
-            },
-          };
-        }
-        return n;
-      }),
-    }));
-
-    // 3. Propagate to downstream data nodes
+    // Propagate to downstream data nodes within the active layer
     const downstreamEdges = edges.filter((e) => e.source === nodeId);
     for (const edge of downstreamEdges) {
       const sourcePort = node.data.outputs.find((o) => o.id === edge.sourceHandle);

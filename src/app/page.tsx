@@ -13,6 +13,9 @@ import {
   Layers,
   Activity,
   Plus,
+  Copy,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -34,6 +37,7 @@ export default function Home() {
   const activeLayerId = useNodeEditorStore((state) => state.activeLayerId);
   const isLayersViewOpen = useNodeEditorStore((state) => state.isLayersViewOpen);
   const addLayer = useNodeEditorStore((state) => state.addLayer);
+  const duplicateLayer = useNodeEditorStore((state) => state.duplicateLayer);
   const selectLayer = useNodeEditorStore((state) => state.selectLayer);
   const deleteLayer = useNodeEditorStore((state) => state.deleteLayer);
   const setIsLayersViewOpen = useNodeEditorStore((state) => state.setIsLayersViewOpen);
@@ -147,7 +151,7 @@ export default function Home() {
               max={2000}
               step={50}
               value={[stepDelayMs]}
-              onValueChange={(val: any) => setStepDelayMs(val[0])}
+              onValueChange={(val: any) => setStepDelayMs(Array.isArray(val) ? val[0] : val)}
               className="w-16 cursor-pointer"
             />
             <span className="text-[10px] font-mono text-amber-400 font-bold min-w-[40px] text-right">
@@ -225,12 +229,36 @@ export default function Home() {
           {/* Floating Multilayer Controls */}
           <div className="absolute top-4 right-4 z-30 flex items-center gap-1.5 bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 p-1.5 rounded-lg shadow-lg">
             <button
+              onClick={() => {
+                const idx = layers.findIndex((l) => l.id === activeLayerId);
+                const prevIdx = (idx - 1 + layers.length) % layers.length;
+                selectLayer(layers[prevIdx].id);
+              }}
+              disabled={layers.length <= 1}
+              className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 disabled:opacity-30 disabled:hover:bg-transparent transition cursor-pointer disabled:cursor-default"
+              title="Previous dimension"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+            <button
               onClick={() => setIsLayersViewOpen(!isLayersViewOpen)}
               className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold text-zinc-300 hover:text-zinc-100 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-700 rounded transition cursor-pointer"
               title="Show workspaces as layers"
             >
               <Layers className="w-3.5 h-3.5 text-cyan-400" />
               <span>{layers.findIndex(l => l.id === activeLayerId) + 1} / {layers.length}</span>
+            </button>
+            <button
+              onClick={() => {
+                const idx = layers.findIndex((l) => l.id === activeLayerId);
+                const nextIdx = (idx + 1) % layers.length;
+                selectLayer(layers[nextIdx].id);
+              }}
+              disabled={layers.length <= 1}
+              className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 disabled:opacity-30 disabled:hover:bg-transparent transition cursor-pointer disabled:cursor-default"
+              title="Next dimension"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={addLayer}
@@ -247,43 +275,43 @@ export default function Home() {
       {isLayersViewOpen && (
         <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-xl z-50 flex flex-col items-center justify-center p-8 select-none">
           {/* Close Button / Header */}
-          <div className="w-full max-w-4xl flex items-center justify-between mb-8">
-            <div className="flex flex-col">
-              <h2 className="text-xl font-black uppercase tracking-wider bg-gradient-to-r from-cyan-400 to-violet-500 bg-clip-text text-transparent">
-                Dimension Deck Navigator
+          <div className="w-full max-w-5xl flex items-center justify-between mb-10">
+            <div className="flex flex-col gap-1">
+              <h2 className="text-lg font-semibold text-zinc-100">
+                Dimension Layers
               </h2>
-              <p className="text-xs text-zinc-500 uppercase tracking-widest mt-0.5 font-bold">
-                Navigate layers with Arrow Keys, Click to select, Enter to confirm
+              <p className="text-xs text-zinc-500">
+                Use ← / → to navigate, click a page to select, Enter to confirm
               </p>
             </div>
             <Button
               variant="outline"
               size="sm"
               onClick={() => setIsLayersViewOpen(false)}
-              className="h-8 border-zinc-850 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200"
+              className="h-8 border-zinc-800 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200"
             >
               Close (ESC)
             </Button>
           </div>
 
-          {/* 3D Stack Deck Area */}
-          <div className="relative flex-1 w-full max-w-4xl flex items-center justify-center perspective-[1200px]">
+          {/* Dimension Pages Area */}
+          <div className="relative flex-1 w-full flex items-center justify-center perspective-[2200px]">
             {layers.map((layer, index) => {
               const activeIdx = layers.findIndex(l => l.id === activeLayerId);
               const position = index - activeIdx; // -2, -1, 0, 1, 2...
               const isCurrent = position === 0;
               const isBefore = position < 0;
-              
+
               let transformStyle = "";
               if (isCurrent) {
-                transformStyle = "translateZ(0px) rotateX(15deg) rotateY(-10deg) scale(1)";
+                transformStyle = "translateZ(0px) rotateY(0deg) scale(1)";
               } else if (isBefore) {
-                transformStyle = `translateX(${position * 110}px) translateY(${position * 10}px) translateZ(${position * 80}px) rotateX(15deg) rotateY(-10deg) scale(${1 + position * 0.08})`;
+                transformStyle = `translateX(${position * 260}px) translateZ(${position * 260}px) rotateY(32deg) scale(${1 + position * 0.1})`;
               } else {
-                transformStyle = `translateX(${position * 110}px) translateY(${position * -10}px) translateZ(${position * -80}px) rotateX(15deg) rotateY(-10deg) scale(${1 - position * 0.08})`;
+                transformStyle = `translateX(${position * 260}px) translateZ(${position * -260}px) rotateY(32deg) scale(${1 - position * 0.1})`;
               }
 
-              const opacity = isCurrent ? "opacity-100" : "opacity-45 hover:opacity-75";
+              const depthEffect = isCurrent ? "" : "opacity-30 blur-[1px] saturate-[0.4]";
               const zIndex = 30 - Math.abs(position);
 
               return (
@@ -294,79 +322,88 @@ export default function Home() {
                     transform: transformStyle,
                     zIndex: zIndex,
                     transformStyle: "preserve-3d",
-                    transition: "all 0.5s cubic-bezier(0.25, 1, 0.5, 1)",
+                    transition: "all 0.6s cubic-bezier(0.25, 1, 0.5, 1)",
                   }}
-                  className={`absolute w-80 h-52 rounded-2xl border bg-zinc-900/90 backdrop-blur-md p-5 flex flex-col justify-between shadow-2xl cursor-pointer ${
-                    isCurrent
-                      ? "border-cyan-400 shadow-[0_0_30px_rgba(34,211,238,0.25)]"
-                      : "border-zinc-800/80 shadow-[0_0_15px_rgba(0,0,0,0.5)]"
-                  } ${opacity}`}
+                  className={`absolute w-[70vw] h-[68vh] max-w-[1000px] rounded-2xl bg-white/[0.025] backdrop-blur-xl flex flex-col justify-between shadow-[0_30px_100px_rgba(0,0,0,0.5)] cursor-pointer transition-[opacity,filter] duration-500 ${depthEffect}`}
                 >
-                  {isCurrent && (
-                    <div className="absolute inset-0 bg-cyan-500/5 rounded-2xl pointer-events-none blur-sm" />
-                  )}
-
                   {/* Card Header */}
-                  <div className="flex items-start justify-between z-10">
-                    <div className="flex flex-col">
-                      <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">
+                  <div className="flex items-start justify-between px-10 pt-8">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[11px] font-medium text-zinc-500 tracking-wide">
                         Dimension Layer
                       </span>
-                      <span className="font-black text-sm text-zinc-100 mt-0.5 uppercase tracking-wide">
+                      <span className="font-semibold text-2xl text-zinc-100">
                         {layer.name}
                       </span>
                     </div>
-                    {layers.length > 1 && (
+                    <div className="flex items-center gap-1">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          deleteLayer(layer.id);
+                          duplicateLayer(layer.id);
                         }}
-                        className="p-1 rounded hover:bg-zinc-800 text-zinc-500 hover:text-red-400 transition"
-                        title="Collapse dimension"
+                        className="p-2 rounded-md hover:bg-white/5 text-zinc-500 hover:text-zinc-200 transition"
+                        title="Duplicate dimension to a new layer"
                       >
-                        <Trash2 size={12} />
+                        <Copy size={16} />
                       </button>
-                    )}
+                      {layers.length > 1 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteLayer(layer.id);
+                          }}
+                          className="p-2 rounded-md hover:bg-white/5 text-zinc-500 hover:text-red-400 transition"
+                          title="Collapse dimension"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Card Body - Schematic Preview */}
-                  <div className="flex-1 my-3.5 flex items-center justify-center border border-zinc-800/60 bg-zinc-950/50 rounded-lg p-2 overflow-hidden relative select-none">
+                  <div className="flex-1 mx-10 my-6 flex items-center justify-center overflow-hidden relative select-none">
                     {layer.nodes.length > 0 ? (
-                      <div className="w-full h-full flex flex-wrap gap-1 items-center justify-center opacity-70">
-                        {layer.nodes.slice(0, 8).map((node) => {
-                          let pillColor = "bg-zinc-800/40 border-zinc-700/60 text-zinc-400";
-                          if (node.type === "triggerInput") pillColor = "bg-amber-950/40 border-amber-900/60 text-amber-400";
-                          else if (node.type === "pythonScript" || node.type?.startsWith("ollama")) pillColor = "bg-violet-950/40 border-violet-900/60 text-violet-400";
-                          else if (node.type?.endsWith("Gate") || node.type === "compareNode") pillColor = "bg-emerald-950/40 border-emerald-900/60 text-emerald-400";
+                      <div className="w-full h-full flex flex-wrap gap-2 items-center justify-center content-center">
+                        {layer.nodes.slice(0, 14).map((node) => {
+                          let pillColor = "bg-white/[0.03] text-zinc-400";
+                          if (node.type === "triggerInput") pillColor = "bg-amber-500/[0.06] text-amber-400/80";
+                          else if (node.type === "pythonScript" || node.type?.startsWith("ollama")) pillColor = "bg-violet-500/[0.06] text-violet-400/80";
+                          else if (node.type?.endsWith("Gate") || node.type === "compareNode") pillColor = "bg-emerald-500/[0.06] text-emerald-400/80";
                           return (
-                            <div key={node.id} className={`text-[6.5px] font-bold px-1.5 py-0.5 rounded-full border ${pillColor}`}>
+                            <div key={node.id} className={`text-xs font-medium px-3 py-1.5 rounded-full ${pillColor}`}>
                               {node.data.label}
                             </div>
                           );
                         })}
-                        {layer.nodes.length > 8 && <span className="text-[8px] text-zinc-600 font-bold">+{layer.nodes.length - 8}</span>}
+                        {layer.nodes.length > 14 && <span className="text-xs text-zinc-600">+{layer.nodes.length - 14} more</span>}
                       </div>
                     ) : (
-                      <span className="text-[9px] text-zinc-600 italic">Empty Dimension</span>
+                      <span className="text-sm text-zinc-600">Empty dimension</span>
                     )}
                   </div>
 
                   {/* Card Footer */}
-                  <div className="flex items-center justify-between text-[9px] font-bold text-zinc-500 uppercase tracking-widest z-10 border-t border-zinc-800/40 pt-2">
-                    <span>Nodes: {layer.nodes.length}</span>
-                    <span>Connections: {layer.edges.length}</span>
+                  <div className="flex items-center justify-between text-xs font-medium text-zinc-500 px-10 pb-8">
+                    <span>{layer.nodes.length} node{layer.nodes.length === 1 ? "" : "s"}</span>
+                    <span>{layer.edges.length} connection{layer.edges.length === 1 ? "" : "s"}</span>
                   </div>
                 </div>
               );
             })}
           </div>
 
-          {/* Carousel controls */}
-          <div className="flex items-center gap-6 mt-8">
-            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider bg-zinc-900 border border-zinc-850 px-3 py-1 rounded-full shadow">
-              Use ← / → Arrow Keys to rotate deck • Enter to select • ESC to close
-            </span>
+          {/* Page position indicator */}
+          <div className="flex items-center gap-2 mt-10">
+            {layers.map((layer) => (
+              <div
+                key={layer.id}
+                className={`h-1.5 rounded-full transition-all ${
+                  layer.id === activeLayerId ? "w-6 bg-zinc-300" : "w-1.5 bg-zinc-700"
+                }`}
+              />
+            ))}
           </div>
         </div>
       )}

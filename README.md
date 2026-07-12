@@ -13,13 +13,17 @@ LogiBoard is a multi-dimensional, node-driven visual logic editor and execution 
 
 ### 2. Multi-Dimensional Workspaces (3D Layers)
 - **Parallel Spaces**: Organize workflows into separate workspaces ("layers") that compile and execute in parallel.
-- **3D Card Stack Navigator**: A visual overlay stacked in 3D perspective.
-  - Active workspace sits highlighted in front with a cyan border.
-  - Inactive workspaces stack behind, showing schematic miniature previews of their node layout.
-  - Navigate using keyboard **Arrow Keys** (left/right/up/down), click to focus, and press **Enter** to load.
-- **Dimensional Bridges**: Toggle any standard node to be "multi-dimensional". It gets styled with a glowing neon cyan gradient shadow, and its outputs publish globally to be accessible from any other workspace dimension.
+- **Dimension Layers Deck**: A large, borderless, glassy 3D carousel overlay — the active page renders full-size and sharp, while neighboring dimensions are visibly shifted, rotated, and "x-rayed" (dimmed, blurred, desaturated) behind it.
+  - Navigate using keyboard **Arrow Keys**, click a page to focus, and press **Enter** to load.
+  - Prev/next chevron arrows next to the layer counter in the floating top-right control let you step through dimensions without opening the full deck.
+  - **Duplicate** any dimension into a new layer (clones its nodes/edges with remapped ids so backend execution never collides) or **collapse** (delete) one, right from the deck.
+- **Dimensional Bridges**: Toggle any node's globe icon to make it "multi-dimensional":
+  - It's cloned into every other layer (same position, same config) and glows with a cyan ring.
+  - Each dimension's copy is evaluated together: matching input ports are combined across all dimensions (numbers sum, booleans OR, strings join), the node computes once, and the single result is broadcast back to every dimension's output.
+  - Unchecking removes every clone and leaves the node living only in its original dimension — regardless of which copy you toggled it from.
 
 ### 3. Smart Canvas Sockets & Controls
+- **Color-Coded Node Palette**: The left sidebar's category groups and node cards share the exact color family (blue/teal/purple/amber/rose/violet) as the node headers they add to the canvas, so a node's category is recognizable before you ever drop it.
 - **Double-Socket Architecture**:
   - *Trigger Sockets (Chevron ▷)*: Pulsating amber flow path.
   - *Data Sockets (Circle ○)*: Type-specific colored connections carrying numbers, text, or booleans.
