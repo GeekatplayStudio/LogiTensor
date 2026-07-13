@@ -267,9 +267,6 @@ export function DenseLayerBody({ id, data }: { id: string; data: any }) {
   )
     ? data.outputs.find((o: any) => o.id === "out").value
     : [];
-  const winner = activations.length
-    ? activations.reduce((best, v, j) => (v > activations[best] ? j : best), 0)
-    : -1;
 
   const shownIn = Math.min(xs.length, MAX_DOTS);
   const shownOut = Math.min(neurons, MAX_DOTS);
