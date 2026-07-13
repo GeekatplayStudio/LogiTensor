@@ -239,13 +239,25 @@ export function computeNodeOutputs(
     }
     case "expressionNode": {
       const expr = config.expression ?? "x * 2 + y";
-      outputs.out = safeEvaluate(expr, inputs);
+      // Ports display as X/Y on the node but are named x/y — accept either case.
+      const exprCtx: Record<string, any> = {};
+      for (const key of Object.keys(inputs)) {
+        exprCtx[key] = inputs[key];
+        exprCtx[key.toUpperCase()] = inputs[key];
+      }
+      outputs.out = safeEvaluate(expr, exprCtx);
       break;
     }
     case "mathNode": {
       const expr = config.expression ?? "a + b";
       const ctx: Record<string, any> = {};
-      for (const key of Object.keys(inputs)) ctx[key] = coerceOperand(inputs[key]);
+      // Ports are named a/b/c… but display as A/B/C on the node — accept
+      // either case in the formula so typing what you see on the node works.
+      for (const key of Object.keys(inputs)) {
+        const val = coerceOperand(inputs[key]);
+        ctx[key] = val;
+        ctx[key.toUpperCase()] = val;
+      }
       outputs.out = safeEvaluate(expr, ctx);
       break;
     }

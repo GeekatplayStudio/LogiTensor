@@ -25,6 +25,25 @@ describe("Formula node (mathNode)", () => {
     const out = computeNodeOutputs("mathNode", { a: 10, b: 3 }, { expression: "a > b && b > 0" });
     expect(out.out).toBe(true);
   });
+
+  it("accepts uppercase letters matching the node's displayed port labels", () => {
+    // Ports are named a/b but the node displays them as A/B — typing the
+    // formula using the displayed labels must work identically.
+    const out = computeNodeOutputs("mathNode", { a: 5, b: 1 }, { expression: "A+B" });
+    expect(out.out).toBe(6);
+  });
+
+  it("treats mixed-case identifiers the same as lowercase", () => {
+    const out = computeNodeOutputs("mathNode", { a: 2, b: 3, c: 4 }, { expression: "A + b * C" });
+    expect(out.out).toBe(14);
+  });
+});
+
+describe("Safe Expression node (expressionNode)", () => {
+  it("accepts uppercase letters matching the node's displayed X/Y labels", () => {
+    const out = computeNodeOutputs("expressionNode", { x: 3, y: 4 }, { expression: "X * 2 + Y" });
+    expect(out.out).toBe(10);
+  });
 });
 
 describe("Math Function node", () => {

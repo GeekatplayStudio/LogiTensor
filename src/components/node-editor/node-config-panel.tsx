@@ -107,7 +107,7 @@ export default function NodeConfigPanel({
             placeholder="e.g. a + b * c"
           />
           <p className="text-[9px] text-zinc-600 leading-tight">
-            Inputs grow automatically (a, b, c…). Numbers compute; strings join with +.
+            Inputs grow automatically (a, b, c…). Numbers compute; strings join with +. Either case works — a+b and A+B are the same.
           </p>
         </div>
       )}

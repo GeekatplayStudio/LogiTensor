@@ -302,16 +302,30 @@ def execute_logic_computation(node_type: str, inputs: Dict[str, Any], config: Di
         outputs["out"] = res
     elif node_type == "expressionNode":
         expr = config.get("expression", "x * 2 + y")
-        # Run safe evaluation using our custom library
-        outputs["out"] = safe_evaluate(expr, inputs)
+        # Ports display as X/Y on the node but are named x/y — accept either case.
+        expr_ctx = {}
+        for k, v in inputs.items():
+            expr_ctx[k] = v
+            expr_ctx[k.upper()] = v
+        outputs["out"] = safe_evaluate(expr, expr_ctx)
     elif node_type == "mathNode":
         expr = config.get("expression", "a + b")
-        ctx = {k: _coerce_operand(v) for k, v in inputs.items()}
+        # Ports are named a/b/c… but display as A/B/C on the node — accept
+        # either case in the formula so typing what you see on the node works.
+        ctx = {}
+        for k, v in inputs.items():
+            coerced = _coerce_operand(v)
+            ctx[k] = coerced
+            ctx[k.upper()] = coerced
         try:
             outputs["out"] = safe_evaluate(expr, ctx)
         except TypeError:
             # Mixed string/number operands: fall back to string semantics
-            str_ctx = {k: ("" if v is None else str(v)) for k, v in inputs.items()}
+            str_ctx = {}
+            for k, v in inputs.items():
+                s = "" if v is None else str(v)
+                str_ctx[k] = s
+                str_ctx[k.upper()] = s
             outputs["out"] = safe_evaluate(expr, str_ctx)
     elif node_type == "mathFunctionNode":
         import math
