@@ -205,14 +205,16 @@ Technology was picked to fit the problem, not to look impressive on a list — h
 - **Replace** or **Add** modes let a request start a fresh board or extend the current one; accepted graphs are auto-laid-out left-to-right by topological depth.
 
 ### 7. Live Multi-Language Code Panel
-- A collapsible, resizable right-hand panel renders the current canvas graph as real source code, live, with a language dropdown: **TypeScript, JavaScript, Python, C, C++, Go, Rust, PHP**.
+- A collapsible, resizable right-hand panel renders the current canvas graph as real source code, live, with a language dropdown: **TypeScript, JavaScript, Python, C, C++, Go, Rust, PHP**. It follows the canvas continuously — building, editing, or **loading a saved flow** repopulates it immediately.
+- **Edit mode (code → graph)**: click the pencil to detach the panel and hand-edit the source, then **Apply** to rebuild the canvas from it. Because deterministic parsers for eight languages aren't practical, Apply routes the edited code through the same local-Ollama-plus-schema-validation path as the natural-language builder — the model proposes a graph, and nothing reaches the canvas until every node type, port, and edge is verified against `NODE_DEFINITIONS`. It's a best-effort conversion by design, and says so.
 - TypeScript/JavaScript and Python are **native emitters** — one small per-node-type contract (`setup`/`loop`/`outputs`) shared across ~46 node types, so trigger chains become real `if`/loop/function statements and data wiring becomes threaded expressions, not templated strings. C/C++/Go/Rust/PHP are **derived** from the JavaScript emission through a deterministic line-adapter (rule table + honest `TODO(port by hand)` bailouts for constructs that don't map cleanly) — the same approach Geekatplay Studio's ASH-Mesh Device Logic Studio uses, extended from its original 4-language, 2-native-emitter design.
 - Syntax highlighting via `shiki`; copy-to-clipboard; any node the generator couldn't fully compile surfaces as an in-panel warning instead of silently producing wrong code.
 
 ### 8. Visual Run-Through Testing
+- **Step-by-step highlighting**: the backend returns the real execution order, and the canvas replays it one node at a time — so you see *which node is running now*, not the whole graph turning green at once. The **Delay** slider paces that replay in real time (set it to 0 for an instant run).
 - **Run Tests** (flask icon) fires every Manual Trigger live on the canvas — the same animated, value-labeled execution path as normal interactive use — then grades every **Expected Value** node and reports a pass/fail summary.
-- **Live values on every wire**: data edges now show a value pill during interactive runs (previously only the backend's Run Flow did) — colors and labels are driven by one shared styling helper so the two execution paths look identical.
-- **Pause / Step**: pause the trigger flow mid-run and advance one hop at a time to watch exactly what fires and in what order.
+- **Live values on every wire**: data edges show a value pill during interactive runs (previously only the backend's Run Flow did) — colors and labels are driven by one shared styling helper so the two execution paths look identical.
+- **Pause / Step**: pause mid-run and advance one node at a time to watch exactly what fires and in what order.
 
 ### 9. three.js Flow 3D Preview
 - An orbitable WebGL scene (`@react-three/fiber` + `drei`) renders the live graph as boxes and connecting lines you can drag to orbit — running nodes glow amber, errored nodes flush red, in real time as a flow executes. The app's first genuine three.js surface, added deliberately alongside — not in place of — the existing hand-rolled SVG/Canvas2D 3D views, which stay for the scenes they already handle well.

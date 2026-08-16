@@ -1,7 +1,59 @@
+import { StoreApi } from "zustand";
 import { Edge, Node } from "@xyflow/react";
 import { NodeData } from "@/types/nodes";
 import { edgeValueLabel, idleEdgeStyle, litEdgeStyle } from "@/lib/edge-styles";
 import { getPortColor } from "@/lib/node-styles";
+import { NodeEditorState } from "./types";
+
+type Setter = StoreApi<NodeEditorState>["setState"];
+type Getter = StoreApi<NodeEditorState>["getState"];
+
+// While paused, every execution step blocks here until Resume or a single
+// Step is requested — turning the Delay pacing into a debugger-style walk.
+export async function pauseGate(get: Getter, set: Setter): Promise<void> {
+  while (get().isPaused) {
+    if (get().stepRequested) {
+      set({ stepRequested: false });
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 120));
+  }
+}
+
+/**
+ * Replays the backend's execution trace one node at a time, so the canvas
+ * shows which node is running *now* and the Delay slider paces it in real
+ * time. Previously every node's result landed in a single state update: the
+ * whole graph flashed "success" at once, and Delay only slept *between*
+ * loops, so it had no visible effect within a run.
+ */
+export async function replayTrace(
+  get: Getter,
+  set: Setter,
+  trace: string[],
+  resOutputs: Record<string, Record<string, any>>
+): Promise<void> {
+  for (const nodeId of trace) {
+    if (!get().nodes.some((n) => n.id === nodeId)) continue;
+
+    // Highlight just this node as running.
+    set((state) => ({
+      nodes: state.nodes.map((n) =>
+        n.id === nodeId ? { ...n, data: { ...n.data, executionState: "running" as const } } : n
+      ),
+    }));
+
+    await new Promise((r) => setTimeout(r, get().stepDelayMs));
+    await pauseGate(get, set);
+
+    // Commit only this node's result, so its outgoing wires light up in turn.
+    set((state) => {
+      const nodes = updateLayerNodes(state.nodes, { [nodeId]: resOutputs[nodeId] ?? {} });
+      const edges = updateLayerEdges(state.edges, nodes);
+      return { nodes: updateLayerInputs(nodes, edges, resOutputs), edges };
+    });
+  }
+}
 
 // Pure per-layer helpers extracted from runAll's backend-result application.
 // `resOutputs` is the backend response's `outputs` map (node id -> port values).

@@ -54,12 +54,15 @@ class NlBuildRequest(BaseModel):
     # Aliased because "schema" shadows a BaseModel attribute in pydantic.
     schema_: List[Dict[str, Any]] = Field(default=[], alias="schema")
     model: str = "llama3"
+    # "prompt" = a natural-language request; "code" = hand-edited source the
+    # user wants turned back into a graph.
+    mode: str = "prompt"
 
 
 @app.post("/nl-build")
 async def nl_build(payload: NlBuildRequest):
     try:
-        return await build_graph_from_prompt(payload.prompt, payload.schema_, payload.model)
+        return await build_graph_from_prompt(payload.prompt, payload.schema_, payload.model, payload.mode)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

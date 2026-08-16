@@ -24,6 +24,8 @@ async def run_node_task(node_id: str, state: GraphState) -> GraphState:
     log_msg = f"Executing node {node_id} ({node['data']['label']})"
     state["logs"].append(log_msg)
     state["active_node"] = node_id
+    # Record execution order for the frontend's step-by-step replay.
+    state.setdefault("trace", []).append(node_id)
 
     try:
         # 1. Custom Python execution

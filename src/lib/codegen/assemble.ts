@@ -3,7 +3,7 @@ import type { GraphNode, LanguageProfile, GenerateResult } from "./types";
 import { GraphView, NameAllocator, indent } from "./graph";
 import type { EmitCtx } from "./expressions";
 import { outputExpr } from "./expressions";
-import { chainFrom } from "./chains";
+import { chainFrom, stepInto } from "./chains";
 
 // Assembles a full program for one native language: header imports → setup
 // (state vars + helpers, content-deduped) → one function per Manual Trigger →
@@ -19,6 +19,7 @@ export function assembleNative(nodes: GraphNode[], edges: Edge[], profile: Langu
     setup: new Map(),
     warnings: [],
     visiting: new Set(),
+    emitted: new Set(),
   };
   const unit = profile.id === "python" ? "    " : "  ";
 
@@ -26,11 +27,24 @@ export function assembleNative(nodes: GraphNode[], edges: Edge[], profile: Langu
   const triggerFns: { name: string; body: string[] }[] = [];
   for (const node of nodes) {
     if (node.type !== "triggerInput") continue;
+    ctx.emitted.add(node.id);
     const body = chainFrom(ctx, node, "triggerOut", new Set());
     triggerFns.push({ name: `run_${ctx.names.nameFor(node, "trigger")}`, body: body.length ? body : [profile.emptyBody] });
   }
 
-  // 2. Terminal data outputs (wired to nothing) — print them in main so pure
+  // 2. Nodes no trigger chain reaches. Without this, a graph with no Manual
+  // Trigger (or a side-effecting node left unwired) generated nothing at all —
+  // its whole logic was invisible in the panel. Their action is emitted under
+  // a labeled section so it's clear nothing triggers them yet.
+  const unreached: string[] = [];
+  for (const node of nodes) {
+    if (ctx.emitted.has(node.id)) continue;
+    const triggerIn = node.data.inputs.find((i) => i.type === "trigger");
+    if (!triggerIn) continue;
+    unreached.push(...stepInto(ctx, node, triggerIn.id, new Set()));
+  }
+
+  // 3. Terminal data outputs (wired to nothing) — print them in main so pure
   // data graphs generate runnable, observable programs.
   const terminals: string[] = [];
   for (const node of nodes) {
@@ -38,7 +52,7 @@ export function assembleNative(nodes: GraphNode[], edges: Edge[], profile: Langu
       if (port.type !== "data") continue;
       if (graph.edgesFrom(node.id, port.id).length > 0) continue;
       if (node.type === "triggerInput" || node.type === "imageInputGrid") continue;
-      terminals.push(profile.print(`${JSON.stringify(`${node.data.label}.${port.name} =`)}, ${outputExpr(ctx, node, port.id)}`.replace(", ", profile.id === "python" ? ", " : ", ")));
+      terminals.push(profile.print(`${JSON.stringify(`${node.data.label}.${port.name} =`)}, ${outputExpr(ctx, node, port.id)}`));
     }
   }
 
@@ -58,6 +72,7 @@ export function assembleNative(nodes: GraphNode[], edges: Edge[], profile: Langu
   }
   const main: string[] = [
     ...triggerFns.map((fn) => profile.callStmt(fn.name, [])),
+    ...(unreached.length ? [profile.comment("not reached by any trigger — wire a Manual Trigger to run these"), ...unreached] : []),
     ...terminals,
   ];
   if (main.length === 0) main.push(profile.comment("empty graph"));

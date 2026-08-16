@@ -183,7 +183,8 @@ async def compile_and_run_graph(nodes_json: List[Any], edges_json: List[Any]) ->
         "outputs": {},
         "logs": startup_logs,
         "error": "",
-        "active_node": ""
+        "active_node": "",
+        "trace": []
     }
 
     try:
@@ -191,7 +192,8 @@ async def compile_and_run_graph(nodes_json: List[Any], edges_json: List[Any]) ->
         return {
             "success": True,
             "logs": final_state["logs"],
-            "outputs": final_state["outputs"]
+            "outputs": final_state["outputs"],
+            "trace": final_state.get("trace", [])
         }
     except Exception as e:
         return {

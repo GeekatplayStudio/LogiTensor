@@ -9,6 +9,10 @@ class GraphState(TypedDict):
     logs: List[str]
     error: str
     active_node: str
+    # Ordered node ids in the order they actually executed. The frontend
+    # replays this to highlight one node at a time (paced by the Delay
+    # slider) instead of flashing the whole graph green at once.
+    trace: List[str]
 
 ACTIVE_TYPES = {
     "triggerInput",

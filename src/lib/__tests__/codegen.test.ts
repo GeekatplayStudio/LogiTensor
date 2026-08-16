@@ -113,6 +113,17 @@ describe("generateCode", () => {
     }
   });
 
+  it("emits nodes that no trigger chain reaches (regression: whole graph vanished)", () => {
+    // A Constant -> Logger graph has no Manual Trigger, and Logger's only
+    // output is a trigger, so it produced literally "empty graph" before.
+    const nodes = [makeNode("constNum", "n1", { value: 42 }), makeNode("loggerNode", "log1")];
+    const edges = [edge("n1", "value", "log1", "value")];
+    const py = generateCode(nodes, edges, "python");
+    expect(py.code).toContain("print(42)");
+    expect(py.code).toContain("not reached by any trigger");
+    expect(py.code).not.toContain("empty graph");
+  });
+
   it("derived C target keeps structure and bails honestly on JS-only idioms", () => {
     const nodes = [
       makeNode("triggerInput", "t1"),

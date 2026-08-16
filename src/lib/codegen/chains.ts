@@ -32,7 +32,10 @@ export function chainFrom(ctx: EmitCtx, node: GraphNode, outPort: string, seen: 
 }
 
 /** One node's action when its trigger input fires, plus its onward chain. */
-function stepInto(ctx: EmitCtx, node: GraphNode, inPort: string, seen: Set<string>): string[] {
+export function stepInto(ctx: EmitCtx, node: GraphNode, inPort: string, seen: Set<string>): string[] {
+  // Records that this node is covered by a trigger chain, so the assembler
+  // doesn't also emit it as an unreached node.
+  ctx.emitted.add(node.id);
   const p = ctx.profile;
   const unit = INDENT[p.id];
   const cfg = node.data.config ?? {};

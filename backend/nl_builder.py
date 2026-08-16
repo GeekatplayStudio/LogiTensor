@@ -27,15 +27,30 @@ Rules:
 """
 
 
-async def build_graph_from_prompt(prompt: str, schema: List[Dict[str, Any]], model: str) -> Dict[str, Any]:
+CODE_SYSTEM_PROMPT = SYSTEM_PROMPT + """
+The request is existing SOURCE CODE that the user hand-edited. Reproduce its
+logic as a node graph: read the control flow and data flow and map them onto
+the catalog's node types. Preserve literal values as node config where the
+catalog allows it.
+"""
+
+
+async def build_graph_from_prompt(
+    prompt: str, schema: List[Dict[str, Any]], model: str, mode: str = "prompt"
+) -> Dict[str, Any]:
     catalog = json.dumps(schema, separators=(",", ":"))
-    full_prompt = f"Node catalog:\n{catalog}\n\nRequest: {prompt}\n\nJSON:"
+    if mode == "code":
+        system = CODE_SYSTEM_PROMPT
+        full_prompt = f"Node catalog:\n{catalog}\n\nSource code:\n{prompt}\n\nJSON:"
+    else:
+        system = SYSTEM_PROMPT
+        full_prompt = f"Node catalog:\n{catalog}\n\nRequest: {prompt}\n\nJSON:"
     loop = asyncio.get_event_loop()
     # format="json" makes Ollama constrain decoding to valid JSON — the main
     # reason parsing failures are rare even on small local models.
     res = await loop.run_in_executor(
         None,
-        lambda: ollama.generate(model=model, prompt=full_prompt, system=SYSTEM_PROMPT, format="json"),
+        lambda: ollama.generate(model=model, prompt=full_prompt, system=system, format="json"),
     )
     raw = res.get("response", "")
     try:

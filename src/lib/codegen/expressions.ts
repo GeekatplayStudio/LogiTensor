@@ -15,6 +15,8 @@ export interface EmitCtx {
   warnings: string[];
   /** guards against cycles in the data graph */
   visiting: Set<string>;
+  /** node ids already emitted inside a trigger chain (see stepInto) */
+  emitted: Set<string>;
 }
 
 export function addSetup(ctx: EmitCtx, lines: string[]): void {

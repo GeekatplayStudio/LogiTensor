@@ -13,23 +13,10 @@ import {
   resolveNodeInputs,
 } from "./graph-helpers";
 import { runTriggerLogic } from "./trigger-logic";
-import { updateLayerEdges, updateLayerInputs, updateLayerNodes } from "./run-all-helpers";
+import { pauseGate, replayTrace, updateLayerEdges, updateLayerInputs, updateLayerNodes } from "./run-all-helpers";
 
 type Setter = StoreApi<NodeEditorState>["setState"];
 type Getter = StoreApi<NodeEditorState>["getState"];
-
-// While paused, every trigger hop blocks here until Resume or a single Step
-// is requested — turning the existing per-hop delay into a debugger-style
-// walk-through of the flow.
-async function pauseGate(get: Getter, set: Setter): Promise<void> {
-  while (get().isPaused) {
-    if (get().stepRequested) {
-      set({ stepRequested: false });
-      return;
-    }
-    await new Promise((r) => setTimeout(r, 120));
-  }
-}
 
 export const createExecutionSlice = (set: Setter, get: Getter) => ({
   dataTriggerState: {} as Record<string, boolean>,
@@ -343,7 +330,15 @@ export const createExecutionSlice = (set: Setter, get: Getter) => ({
         console.log("[Execution Result]", res);
 
         if (res.success) {
-          // Update outputs and inputs across ALL dimension slots
+          // Walk the backend's execution order first so the canvas highlights
+          // one node at a time at the configured Delay. Skipped at delay 0 so
+          // "as fast as possible" stays instant.
+          if (Array.isArray(res.trace) && res.trace.length > 0 && get().stepDelayMs > 0) {
+            await replayTrace(get, set, res.trace, res.outputs);
+          }
+
+          // Then settle the full result across ALL dimension slots (this also
+          // covers passive data nodes, which never appear in the trace).
           set((state) => {
             // 1. Process active nodes
             const updatedActiveNodesOutputs = updateLayerNodes(state.nodes, res.outputs);
