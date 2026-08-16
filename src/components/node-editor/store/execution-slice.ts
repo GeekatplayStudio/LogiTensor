@@ -20,6 +20,101 @@ import { logEvent } from "@/lib/debug-log";
 type Setter = StoreApi<NodeEditorState>["setState"];
 type Getter = StoreApi<NodeEditorState>["getState"];
 
+/**
+ * Runs one trigger edge: animates the wire, honors breakpoints/pause, executes
+ * the target node, then continues down whatever that node fires next. Split out
+ * of triggerNode so a fan-out can await each target's full chain in turn.
+ */
+async function fireTriggerEdge(
+  get: Getter,
+  set: Setter,
+  sourceNodeId: string,
+  outputPortId: string,
+  triggerEdge: Edge
+): Promise<void> {
+  const targetNodeId = triggerEdge.target;
+  const targetPortId = triggerEdge.targetHandle;
+  const targetNode = get().nodes.find((n) => n.id === targetNodeId);
+  if (!targetNode) return;
+
+  logEvent(
+    "debug",
+    "exec",
+    `Trigger: ${nodeLabelOf(get, sourceNodeId)}.${outputPortId} → ${targetNode.data.label}.${targetPortId ?? "?"}`
+  );
+
+  // Stop before the target node runs if a breakpoint is armed on it.
+  await breakpointGate(get, set, targetNodeId);
+
+  // 1. Indicate the node is processing/running, and light up the trigger
+  // wire carrying this signal so you can see execution travel through it.
+  set((state) => ({
+    nodes: state.nodes.map((n) =>
+      n.id === targetNodeId ? { ...n, data: { ...n.data, executionState: "running" as const } } : n
+    ),
+    edges: state.edges.map((e) =>
+      e.id === triggerEdge.id
+        ? { ...e, animated: true, style: litEdgeStyle(getPortColor("trigger"), 2.5) }
+        : e
+    ),
+  }));
+
+  // Give visual animation a moment, and honor step-through pause mode.
+  await new Promise((r) => setTimeout(r, get().stepDelayMs));
+  await pauseGate(get, set);
+
+  // 2/3. Refresh inputs, run the node's trigger logic, and determine
+  // what (if anything) fires next.
+  const { nextTriggerPort, status, errorMsg } = await runTriggerLogic(
+    get,
+    set,
+    targetNodeId,
+    targetPortId || ""
+  );
+
+  if (status === "error") {
+    logEvent("error", "exec", `Trigger failed: ${targetNode.data.label}`, errorMsg);
+  }
+
+  // Mark execution status; settle the trigger wire into lit (success)
+  // or dim (error) rather than leaving it mid-animation.
+  set((state) => ({
+    nodes: state.nodes.map((n) =>
+      n.id === targetNodeId
+        ? {
+            ...n,
+            data: {
+              ...n.data,
+              executionState: status,
+              errorMessage: errorMsg || undefined,
+              lastExecuted: new Date().toISOString(),
+            },
+          }
+        : n
+    ),
+    edges: state.edges.map((e) =>
+      e.id === triggerEdge.id
+        ? {
+            ...e,
+            animated: status === "success",
+            style:
+              status === "success"
+                ? litEdgeStyle(getPortColor("trigger"), 2.5)
+                : idleEdgeStyle(2.5),
+          }
+        : e
+    ),
+  }));
+
+  // Trigger downstream evaluations
+  get().evaluateNode(targetNodeId);
+
+  // Call next trigger node in sequence if valid
+  if (nextTriggerPort && status === "success") {
+    await get().triggerNode(targetNodeId, nextTriggerPort);
+  }
+}
+
 export const createExecutionSlice = (set: Setter, get: Getter) => ({
   dataTriggerState: {} as Record<string, boolean>,
   isPaused: false,
@@ -186,102 +281,24 @@ export const createExecutionSlice = (set: Setter, get: Getter) => ({
     }
   },
 
-  // Propagates trigger commands through trigger connection lines
+  // Propagates trigger commands through trigger connection lines.
+  // A trigger output can fan out to several targets; each one's whole
+  // downstream chain runs to completion before the next starts. This used to
+  // use edges.find() — singular — so wiring one trigger to two nodes silently
+  // ran only the first (e.g. two Random generators, only one firing).
   triggerNode: async (nodeId: string, outputPortId: string) => {
-    const { edges, nodes } = get();
-
-    // Find the edge originating from this node's trigger port
-    const triggerEdge = edges.find(
+    const fanOut = get().edges.filter(
       (e) => e.source === nodeId && e.sourceHandle === outputPortId
     );
-    if (!triggerEdge) return;
-
-    const targetNodeId = triggerEdge.target;
-    const targetPortId = triggerEdge.targetHandle;
-    const targetNode = nodes.find((n) => n.id === targetNodeId);
-    if (!targetNode) return;
-
-    const sourceLabel = nodes.find((n) => n.id === nodeId)?.data.label ?? nodeId;
-    logEvent(
-      "debug",
-      "exec",
-      `Trigger: ${sourceLabel}.${outputPortId} → ${targetNode.data.label}.${targetPortId ?? "?"}`
-    );
-
-    // Stop before the target node runs if a breakpoint is armed on it.
-    await breakpointGate(get, set, targetNodeId);
-
-    // 1. Indicate the node is processing/running, and light up the trigger
-    // wire carrying this signal so you can see execution travel through it.
-    set((state) => ({
-      nodes: state.nodes.map((n) =>
-        n.id === targetNodeId
-          ? {
-              ...n,
-              data: { ...n.data, executionState: "running" as const },
-            }
-          : n
-      ),
-      edges: state.edges.map((e) =>
-        e.id === triggerEdge.id
-          ? { ...e, animated: true, style: litEdgeStyle(getPortColor("trigger"), 2.5) }
-          : e
-      ),
-    }));
-
-    // Give visual animation a moment, and honor step-through pause mode.
-    await new Promise((r) => setTimeout(r, get().stepDelayMs));
-    await pauseGate(get, set);
-
-    // 2/3. Refresh inputs, run the node's trigger logic, and determine
-    // what (if anything) fires next.
-    const { nextTriggerPort, status, errorMsg } = await runTriggerLogic(
-      get,
-      set,
-      targetNodeId,
-      targetPortId || ""
-    );
-
-    if (status === "error") {
-      logEvent("error", "exec", `Trigger failed: ${targetNode.data.label}`, errorMsg);
+    if (fanOut.length > 1) {
+      logEvent(
+        "debug",
+        "exec",
+        `Trigger fan-out: ${nodeLabelOf(get, nodeId)}.${outputPortId} → ${fanOut.length} targets`
+      );
     }
-
-    // Mark execution status; settle the trigger wire into lit (success)
-    // or dim (error) rather than leaving it mid-animation.
-    set((state) => ({
-      nodes: state.nodes.map((n) =>
-        n.id === targetNodeId
-          ? {
-              ...n,
-              data: {
-                ...n.data,
-                executionState: status,
-                errorMessage: errorMsg || undefined,
-                lastExecuted: new Date().toISOString(),
-              },
-            }
-          : n
-      ),
-      edges: state.edges.map((e) =>
-        e.id === triggerEdge.id
-          ? {
-              ...e,
-              animated: status === "success",
-              style:
-                status === "success"
-                  ? litEdgeStyle(getPortColor("trigger"), 2.5)
-                  : idleEdgeStyle(2.5),
-            }
-          : e
-      ),
-    }));
-
-    // Trigger downstream evaluations
-    get().evaluateNode(targetNodeId);
-
-    // Call next trigger node in sequence if valid
-    if (nextTriggerPort && status === "success") {
-      await get().triggerNode(targetNodeId, nextTriggerPort);
+    for (const edge of fanOut) {
+      await fireTriggerEdge(get, set, nodeId, outputPortId, edge);
     }
   },
 
@@ -336,6 +353,9 @@ export const createExecutionSlice = (set: Setter, get: Getter) => ({
 
   // Backend compile + run lives in run-all-backend.ts (500-line guardrail).
   runAll: () => executeRunAll(get, set),
+
+  // Last-run diagnostics; filled by executeRunAll, consumed by the Run Report.
+  lastRun: undefined,
 
   // Visual run-through: fires every Manual Trigger in sequence on the live
   // canvas (values light up edge-by-edge), then reads every Expected Value

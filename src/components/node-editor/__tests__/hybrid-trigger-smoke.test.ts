@@ -175,3 +175,51 @@ describe("hybrid trigger port smoke test (store-level)", () => {
     expect(countOf(counterId)).toBe(before + 1);
   });
 });
+
+describe("trigger fan-out", () => {
+  beforeEach(() => {
+    useNodeEditorStore.setState({ nodes: [], edges: [], dataTriggerState: {}, stepDelayMs: 0 });
+  });
+
+  function add(type: string) {
+    useNodeEditorStore.getState().addNode(type, 0, 0);
+    const ns = useNodeEditorStore.getState().nodes;
+    return ns[ns.length - 1].id;
+  }
+
+  it("fires EVERY target wired to one trigger output, not just the first", async () => {
+    // The reported bug: two Random generators off one Manual Trigger, only
+    // one of them ever ran, because triggerNode used edges.find().
+    const t = add("triggerInput");
+    const r1 = add("randomNode");
+    const r2 = add("randomNode");
+    const store = useNodeEditorStore.getState();
+    store.onConnect({ source: t, sourceHandle: "triggerOut", target: r1, targetHandle: "inTrigger" });
+    store.onConnect({ source: t, sourceHandle: "triggerOut", target: r2, targetHandle: "inTrigger" });
+
+    await useNodeEditorStore.getState().triggerNode(t, "triggerOut");
+
+    const ran = (id: string) =>
+      useNodeEditorStore.getState().nodes.find((n) => n.id === id)?.data.executionState;
+    expect(ran(r1)).toBe("success");
+    expect(ran(r2)).toBe("success");
+  });
+
+  it("fans out to three targets in edge order", async () => {
+    const t = add("triggerInput");
+    const logs = [add("loggerNode"), add("loggerNode"), add("loggerNode")];
+    const store = useNodeEditorStore.getState();
+    for (const l of logs) {
+      store.onConnect({ source: t, sourceHandle: "triggerOut", target: l, targetHandle: "inTrigger" });
+    }
+
+    await useNodeEditorStore.getState().triggerNode(t, "triggerOut");
+
+    for (const l of logs) {
+      expect(
+        useNodeEditorStore.getState().nodes.find((n) => n.id === l)?.data.executionState,
+        l
+      ).toBe("success");
+    }
+  });
+});

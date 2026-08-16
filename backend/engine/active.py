@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import os
+from typing import Any, Dict, List
 
 import ollama
 
@@ -8,6 +9,15 @@ from backend.security import validate_python_code
 from backend.engine.state import GraphState, LOOP_TYPES
 from backend.engine.helpers import _is_trigger_handle, _condition_flag, _clear_passive_cache
 from backend.engine.passive import resolve_inputs, execute_logic_computation
+
+
+def _loop_body_edges(node_id: str, state: GraphState) -> List[Dict[str, Any]]:
+    """Every edge leaving a loop node's Body port, in authoring order — a loop
+    body may fan out to several independent chains per iteration."""
+    return [
+        e for e in state["edges"]
+        if e.get("source") == node_id and e.get("sourceHandle") == "loopBody"
+    ]
 
 
 async def run_node_task(node_id: str, state: GraphState) -> GraphState:
@@ -181,25 +191,19 @@ async def run_node_task(node_id: str, state: GraphState) -> GraphState:
             except (TypeError, ValueError):
                 count = 0
             count = max(0, min(1000, count))
-            body_edge = next(
-                (e for e in state["edges"] if e.get("source") == node_id and e.get("sourceHandle") == "loopBody"),
-                None,
-            )
+            body_edges = _loop_body_edges(node_id, state)
             state["logs"].append(f"For Loop starting: {count} iterations.")
             for i in range(count):
                 outputs["index"] = i
                 state["outputs"][node_id] = dict(outputs)
                 _clear_passive_cache(state)
-                if body_edge:
+                for body_edge in body_edges:
                     await run_trigger_chain(body_edge["target"], state)
             state["logs"].append(f"For Loop completed {count} iterations.")
 
         # 6.8 While Loop: run the Body chain while Condition stays true
         elif node_type == "whileLoopNode":
-            body_edge = next(
-                (e for e in state["edges"] if e.get("source") == node_id and e.get("sourceHandle") == "loopBody"),
-                None,
-            )
+            body_edges = _loop_body_edges(node_id, state)
             iteration = 0
             while iteration < 1000:
                 outputs["iteration"] = iteration
@@ -210,7 +214,7 @@ async def run_node_task(node_id: str, state: GraphState) -> GraphState:
                 cond_val = resolve_inputs(node_id, state).get("condition", False)
                 if not _condition_flag(cond_val, state):
                     break
-                if body_edge:
+                for body_edge in body_edges:
                     await run_trigger_chain(body_edge["target"], state)
                 iteration += 1
             if iteration >= 1000:
@@ -235,52 +239,102 @@ async def run_node_task(node_id: str, state: GraphState) -> GraphState:
     return state
 
 
-async def run_trigger_chain(start_id: str, state: GraphState, max_steps: int = 5000) -> None:
+def next_trigger_edges(node_id: str, state: GraphState) -> List[Dict[str, Any]]:
     """
-    Executes a trigger chain sequentially outside LangGraph — used for loop
-    bodies. Follows trigger edges node by node, honoring If/Else branching and
-    letting nested loops recurse through run_node_task.
+    Returns EVERY trigger edge the chain should follow out of `node_id`, in
+    the order the edges were authored. A trigger output may be wired to any
+    number of targets (fan-out); returning a list rather than the first match
+    is what makes that work.
+
+    Which port fires is node-type dependent: If/Else picks one branch, loops
+    continue from Done (their Body already ran inside run_node_task), and an
+    LIF neuron only continues down Spike when it actually fired.
     """
+    ntype = (state["nodes"].get(node_id) or {}).get("type")
+    edges = state["edges"]
+
+    if ntype == "ifElseTrigger":
+        cond_val = resolve_inputs(node_id, state).get("condition", False)
+        branch = "onTrue" if _condition_flag(cond_val, state) else "onFalse"
+        handles = {branch}
+    elif ntype in LOOP_TYPES:
+        handles = {"done"}
+    elif ntype == "leakyIntegrateFire":
+        # Silent neuron: the chain simply stops here.
+        if not state["outputs"].get(node_id, {}).get("_spiked", False):
+            return []
+        handles = {"spike"}
+    else:
+        return [
+            e for e in edges
+            if e.get("source") == node_id
+            and _is_trigger_handle(e.get("sourceHandle"))
+            and e.get("sourceHandle") != "loopBody"
+        ]
+
+    return [e for e in edges if e.get("source") == node_id and e.get("sourceHandle") in handles]
+
+
+async def run_trigger_chain(
+    start_id: str,
+    state: GraphState,
+    max_steps: int = 5000,
+    _budget: Dict[str, int] = None,
+    _path: List[str] = None,
+) -> None:
+    """
+    Executes a trigger chain sequentially, depth-first, in edge order — the
+    single execution path for the whole engine (top-level entry points as well
+    as loop bodies).
+
+    Fan-out: when a trigger port feeds several targets, each target's ENTIRE
+    downstream chain completes before the next target starts, mirroring the
+    frontend's awaited recursion.
+
+    Structure note: the linear tail is walked with a `while` loop and only the
+    extra fan-out branches recurse, so a long straight chain costs O(1) stack
+    depth — recursion depth tracks branching, not chain length.
+
+    Runaway protection is two-layered:
+      * `_budget` — a shared node-execution count across the whole recursion,
+        capped at `max_steps` (the original guard).
+      * `_path` — the ids currently on the DFS path. Re-entering one means the
+        trigger wiring loops back on itself, which would recurse forever, so
+        that branch stops. Diamonds (two branches re-converging on one node)
+        are NOT cycles and still run the shared node once per branch.
+    """
+    budget = _budget if _budget is not None else {"steps": 0}
+    path = _path if _path is not None else []
+    entered = 0
     current = start_id
-    steps = 0
-    while current and steps < max_steps:
-        steps += 1
-        node = state["nodes"].get(current)
-        if not node:
-            return
-        await run_node_task(current, state)
-        ntype = node.get("type")
-        if ntype == "ifElseTrigger":
-            cond_val = resolve_inputs(current, state).get("condition", False)
-            branch = "onTrue" if _condition_flag(cond_val, state) else "onFalse"
-            nxt = next(
-                (e for e in state["edges"] if e.get("source") == current and e.get("sourceHandle") == branch),
-                None,
-            )
-        elif ntype in LOOP_TYPES:
-            # The loop already ran its own body inside run_node_task —
-            # continue the chain from its Done port.
-            nxt = next(
-                (e for e in state["edges"] if e.get("source") == current and e.get("sourceHandle") == "done"),
-                None,
-            )
-        elif ntype == "leakyIntegrateFire":
-            # Only continue down the Spike edge if the neuron actually fired
-            # this step — otherwise the chain stops here, like a real neuron
-            # that stays silent below threshold.
-            spiked = state["outputs"].get(current, {}).get("_spiked", False)
-            nxt = next(
-                (e for e in state["edges"] if e.get("source") == current and e.get("sourceHandle") == "spike"),
-                None,
-            ) if spiked else None
-        else:
-            nxt = next(
-                (
-                    e for e in state["edges"]
-                    if e.get("source") == current
-                    and _is_trigger_handle(e.get("sourceHandle"))
-                    and e.get("sourceHandle") != "loopBody"
-                ),
-                None,
-            )
-        current = nxt["target"] if nxt else None
+
+    try:
+        while current:
+            if state["nodes"].get(current) is None:
+                return
+            if current in path:
+                state["logs"].append(
+                    f"Trigger cycle detected at node {current}; stopping this branch."
+                )
+                return
+            if budget["steps"] >= max_steps:
+                state["logs"].append(
+                    f"Trigger chain stopped: {max_steps}-step safety cap reached."
+                )
+                return
+            budget["steps"] += 1
+
+            await run_node_task(current, state)
+            path.append(current)
+            entered += 1
+
+            nxts = next_trigger_edges(current, state)
+            if not nxts:
+                return
+            # All but the last branch recurse; the last continues this loop so
+            # straight chains stay iterative.
+            for edge in nxts[:-1]:
+                await run_trigger_chain(edge["target"], state, max_steps, budget, path)
+            current = nxts[-1]["target"]
+    finally:
+        del path[len(path) - entered:]

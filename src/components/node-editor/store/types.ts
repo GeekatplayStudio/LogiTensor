@@ -6,6 +6,7 @@ import {
   NodeChange,
 } from "@xyflow/react";
 import { NodeData } from "@/types/nodes";
+import type { LastRunInfo } from "@/lib/run-report";
 
 export interface Layer {
   id: string;
@@ -80,6 +81,9 @@ export interface NodeEditorState {
   fireTriggerInput: (nodeId: string, portId: string) => Promise<void>;
   dataTriggerState: Record<string, boolean>;
   runAll: () => Promise<void>;
+  // Diagnostics for the last backend run (trace, logs, outputs). Populated on
+  // both success and failure; deliberately NOT part of the saved file payload.
+  lastRun?: LastRunInfo;
   // Step-through debugging: while paused, every trigger hop waits for either
   // Resume or a single Step (see pauseGate in execution-slice.ts).
   isPaused: boolean;

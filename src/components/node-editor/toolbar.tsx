@@ -17,8 +17,12 @@ import {
   Repeat,
   Timer,
   Terminal as TerminalIcon,
+  ClipboardList,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { getLogEntries } from "@/lib/debug-log";
+import { buildRunReport, downloadRunReport } from "@/lib/run-report";
 import { useNodeEditorStore } from "./use-node-editor-store";
 
 // Compact header toolbar: everything except the primary Run action is an
@@ -57,6 +61,24 @@ export default function Toolbar({
   const setRunLoops = useNodeEditorStore((s) => s.setRunLoops);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Builds the diagnostic bundle, downloads it and (best effort) puts it on the
+  // clipboard so it can be pasted straight into a chat or issue.
+  const handleRunReport = async () => {
+    const { nodes, edges, lastRun } = useNodeEditorStore.getState();
+    const report = buildRunReport({ nodes, edges, lastRun, debugLog: getLogEntries() });
+    const markdown = downloadRunReport(report);
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(markdown);
+      copied = true;
+    } catch {
+      // Clipboard is permission-gated / unavailable — the download still worked.
+    }
+    const suffix = copied ? " and copied to clipboard" : " (clipboard unavailable)";
+    if (lastRun) toast.success(`Run report downloaded${suffix}`);
+    else toast.warning(`No run yet — report downloaded without run data${suffix}`);
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -161,6 +183,9 @@ export default function Toolbar({
         <Upload className="w-3.5 h-3.5" />
       </Button>
       <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".json" className="hidden" />
+      <Button variant="outline" size="sm" onClick={handleRunReport} className={iconBtn} title="Run Report: download + copy a full diagnostic bundle (trace, unexecuted nodes, code, flow JSON, logs)">
+        <ClipboardList className="w-3.5 h-3.5" />
+      </Button>
 
       <div className="w-px h-4 bg-zinc-800/70 mx-0.5" />
 

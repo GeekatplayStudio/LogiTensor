@@ -2,6 +2,7 @@ import { StoreApi } from "zustand";
 import { toast } from "sonner";
 import { logEvent, type LogLevel } from "@/lib/debug-log";
 import { NodeEditorState } from "./types";
+import type { LastRunInfo } from "@/lib/run-report";
 import { replayTrace, updateLayerEdges, updateLayerInputs, updateLayerNodes } from "./run-all-helpers";
 
 type Setter = StoreApi<NodeEditorState>["setState"];
@@ -56,6 +57,28 @@ export async function executeRunAll(get: Getter, set: Setter): Promise<void> {
   const toastId = toast.loading(`Starting execution loop (0/${loopsCount})...`);
   get().resetExecutionStates();
 
+  // Accumulated across loops so the Run Report reflects the whole run, not
+  // just its final iteration.
+  const trace: string[] = [];
+  const backendLogs: string[] = [];
+  let outputs: Record<string, Record<string, unknown>> = {};
+
+  const recordRun = (success: boolean, error?: string): void => {
+    const finishedAt = Date.now();
+    const lastRun: LastRunInfo = {
+      startedAt,
+      finishedAt,
+      durationMs: finishedAt - startedAt,
+      success,
+      ...(error ? { error } : {}),
+      loops: loopsCount,
+      trace,
+      backendLogs,
+      outputs,
+    };
+    set({ lastRun });
+  };
+
   try {
     for (let i = 0; i < loopsCount; i++) {
       if (loopsCount > 1) {
@@ -89,6 +112,13 @@ export async function executeRunAll(get: Getter, set: Setter): Promise<void> {
 
       const res = await response.json();
       replayBackendLogs(res.logs);
+      if (Array.isArray(res.logs)) {
+        for (const line of res.logs) backendLogs.push(typeof line === "string" ? line : JSON.stringify(line));
+      }
+      if (Array.isArray(res.trace)) {
+        for (const id of res.trace) if (typeof id === "string") trace.push(id);
+      }
+      if (res.outputs && typeof res.outputs === "object") outputs = res.outputs;
 
       if (!res.success) throw new Error(res.error || "Compilation failed");
 
@@ -144,7 +174,9 @@ export async function executeRunAll(get: Getter, set: Setter): Promise<void> {
       "exec",
       `Run finished — ${loopsCount} loop(s) in ${Date.now() - startedAt}ms`
     );
+    recordRun(true);
   } catch (err: any) {
+    recordRun(false, err?.message ?? String(err));
     toast.dismiss(toastId);
     toast.error(
       `LangGraph run failed: ${err.message}. Make sure Python FastAPI is running on port 8000.`
