@@ -26,8 +26,20 @@ export const CODE_TARGETS: CodeTarget[] = [
 
 export type GraphNode = Node<NodeData>;
 
+// One emitted source line plus the graph node that produced it. Source mapping
+// is carried per line (rather than recomputed by matching text afterwards)
+// because derived targets filter and reorder lines — see adapters.ts.
+export interface CodeLine {
+  text: string;
+  /** id of the node this line came from; undefined for imports/helpers/headers */
+  nodeId?: string;
+}
+
 export interface GenerateResult {
+  /** joined program text — always `lines.map(l => l.text).join("\n") + "\n"` */
   code: string;
+  /** same program, one entry per line, tagged with its originating node */
+  lines: CodeLine[];
   /** non-fatal notes surfaced above the code (e.g. cycle detected, TODO ports) */
   warnings: string[];
 }

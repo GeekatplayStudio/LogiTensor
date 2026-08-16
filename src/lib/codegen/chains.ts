@@ -1,7 +1,7 @@
-import type { GraphNode } from "./types";
+import type { CodeLine, GraphNode } from "./types";
 import type { EmitCtx } from "./expressions";
 import { addSetup, inputExpr, outputExpr, stateVar } from "./expressions";
-import { indent } from "./graph";
+import { indentLines, tag } from "./lines";
 import { literal } from "./profiles";
 import { requireHelper } from "./runtime-helpers";
 
@@ -13,8 +13,8 @@ import { requireHelper } from "./runtime-helpers";
 const INDENT = { javascript: "  ", python: "    " } as const;
 
 /** Statements for everything downstream of one trigger output port. */
-export function chainFrom(ctx: EmitCtx, node: GraphNode, outPort: string, seen: Set<string>): string[] {
-  const lines: string[] = [];
+export function chainFrom(ctx: EmitCtx, node: GraphNode, outPort: string, seen: Set<string>): CodeLine[] {
+  const lines: CodeLine[] = [];
   for (const edge of ctx.graph.edgesFrom(node.id, outPort)) {
     const target = edge.target ? ctx.graph.node(edge.target) : undefined;
     if (!target) continue;
@@ -22,7 +22,7 @@ export function chainFrom(ctx: EmitCtx, node: GraphNode, outPort: string, seen: 
     if (seen.has(key)) {
       // Trigger loops exist on the canvas (runtime caps them); sequential
       // code can't inline them infinitely, so cut with an honest marker.
-      lines.push(ctx.profile.comment(`recursion into ${target.data.label} cut (trigger loop)`));
+      lines.push(...tag([ctx.profile.comment(`recursion into ${target.data.label} cut (trigger loop)`)], target.id));
       continue;
     }
     seen.add(key);
@@ -33,139 +33,145 @@ export function chainFrom(ctx: EmitCtx, node: GraphNode, outPort: string, seen: 
 }
 
 /** One node's action when its trigger input fires, plus its onward chain. */
-export function stepInto(ctx: EmitCtx, node: GraphNode, inPort: string, seen: Set<string>): string[] {
+export function stepInto(ctx: EmitCtx, node: GraphNode, inPort: string, seen: Set<string>): CodeLine[] {
   // Records that this node is covered by a trigger chain, so the assembler
   // doesn't also emit it as an unreached node.
   ctx.emitted.add(node.id);
   const p = ctx.profile;
   const unit = INDENT[p.id];
   const cfg = node.data.config ?? {};
-  const out: string[] = [];
-  const body = (port: string) => {
+  const out: CodeLine[] = [];
+  // Everything this emitter writes itself belongs to this node; statements
+  // spliced in from chainFrom keep the tag of the node that produced them.
+  const emit = (...texts: string[]): void => {
+    out.push(...tag(texts, node.id));
+  };
+  const own = (texts: string[]) => tag(texts, node.id);
+  const body = (port: string): CodeLine[] => {
     const b = chainFrom(ctx, node, port, seen);
-    return b.length ? b : [p.emptyBody];
+    return b.length ? b : own([p.emptyBody]);
   };
 
   switch (node.type) {
     case "delayNode":
-      out.push(p.sleepMs(p.num(inputExpr(ctx, node, "delayMs"))));
+      emit(p.sleepMs(p.num(inputExpr(ctx, node, "delayMs"))));
       out.push(...chainFrom(ctx, node, "outTrigger", seen));
       break;
     case "loggerNode":
     case "textOutputNode":
-      out.push(p.print(inputExpr(ctx, node, "value")));
+      emit(p.print(inputExpr(ctx, node, "value")));
       out.push(...chainFrom(ctx, node, "outTrigger", seen));
       break;
     case "randomNode": {
       const v = stateVar(ctx, node, "value");
-      out.push(p.assign(v, p.randomInt(inputExpr(ctx, node, "min"), inputExpr(ctx, node, "max"))));
+      emit(p.assign(v, p.randomInt(inputExpr(ctx, node, "min"), inputExpr(ctx, node, "max"))));
       out.push(...chainFrom(ctx, node, "outTrigger", seen));
       break;
     }
     case "counterNode": {
       const v = stateVar(ctx, node, "count");
-      if (inPort === "incTrigger") out.push(p.assign(v, `${v} + 1`));
-      else if (inPort === "decTrigger") out.push(p.assign(v, `${v} - 1`));
-      else out.push(p.assign(v, "0"));
+      if (inPort === "incTrigger") emit(p.assign(v, `${v} + 1`));
+      else if (inPort === "decTrigger") emit(p.assign(v, `${v} - 1`));
+      else emit(p.assign(v, "0"));
       break;
     }
     case "rangeNode": {
       const v = stateVar(ctx, node, "count");
       if (inPort === "resetTrigger") {
-        out.push(p.assign(v, literal(p, Number(cfg.initialCount ?? 0))));
+        emit(p.assign(v, literal(p, Number(cfg.initialCount ?? 0))));
       } else {
-        out.push(p.ifLine(outputExpr(ctx, node, "inRange")));
-        out.push(...indent([p.assign(v, `${v} + 1`)], unit));
-        out.push(p.elseLine);
-        out.push(...indent([p.assign(v, `${v} - 1`)], unit));
-        if (p.blockClose) out.push(p.blockClose);
+        emit(p.ifLine(outputExpr(ctx, node, "inRange")));
+        out.push(...indentLines(own([p.assign(v, `${v} + 1`)]), unit));
+        emit(p.elseLine);
+        out.push(...indentLines(own([p.assign(v, `${v} - 1`)]), unit));
+        if (p.blockClose) emit(p.blockClose);
       }
       break;
     }
     case "ifElseTrigger": {
-      out.push(p.ifLine(conditionExpr(ctx, node)));
-      out.push(...indent(body("onTrue"), unit));
-      out.push(p.elseLine);
-      out.push(...indent(body("onFalse"), unit));
-      if (p.blockClose) out.push(p.blockClose);
+      emit(p.ifLine(conditionExpr(ctx, node)));
+      out.push(...indentLines(body("onTrue"), unit));
+      emit(p.elseLine);
+      out.push(...indentLines(body("onFalse"), unit));
+      if (p.blockClose) emit(p.blockClose);
       break;
     }
     case "forLoopNode": {
       const idx = stateVar(ctx, node, "index");
       const iter = `i_${ctx.names.nameFor(node)}`;
-      out.push(p.forRange(iter, p.num(inputExpr(ctx, node, "count"))));
-      out.push(...indent([p.assign(idx, iter), ...body("loopBody")], unit));
-      if (p.blockClose) out.push(p.blockClose);
+      emit(p.forRange(iter, p.num(inputExpr(ctx, node, "count"))));
+      out.push(...indentLines([...own([p.assign(idx, iter)]), ...body("loopBody")], unit));
+      if (p.blockClose) emit(p.blockClose);
       out.push(...chainFrom(ctx, node, "done", seen));
       break;
     }
     case "whileLoopNode": {
       const iter = stateVar(ctx, node, "iteration");
       // 1000-iteration cap mirrors the runtime's safety cap.
-      out.push(p.whileLine(p.and(conditionExpr(ctx, node), `${iter} < 1000`)));
-      out.push(...indent([...body("loopBody"), p.assign(iter, `${iter} + 1`)], unit));
-      if (p.blockClose) out.push(p.blockClose);
+      emit(p.whileLine(p.and(conditionExpr(ctx, node), `${iter} < 1000`)));
+      out.push(...indentLines([...body("loopBody"), ...own([p.assign(iter, `${iter} + 1`)])], unit));
+      if (p.blockClose) emit(p.blockClose);
       out.push(...chainFrom(ctx, node, "done", seen));
       break;
     }
     case "leakyIntegrateFire": {
       const v = stateVar(ctx, node, "potential");
       const leak = Math.min(Math.max(Number(cfg.leak ?? 0.2), 0), 1);
-      out.push(p.assign(v, `${v} * ${1 - leak} + ${p.num(inputExpr(ctx, node, "input"))}`));
-      out.push(p.ifLine(`${v} >= ${Number(cfg.threshold ?? 1)}`));
-      out.push(...indent([p.assign(v, String(Number(cfg.resetValue ?? 0))), ...body("spike")], unit));
-      if (p.blockClose) out.push(p.blockClose);
+      emit(p.assign(v, `${v} * ${1 - leak} + ${p.num(inputExpr(ctx, node, "input"))}`));
+      emit(p.ifLine(`${v} >= ${Number(cfg.threshold ?? 1)}`));
+      out.push(...indentLines([...own([p.assign(v, String(Number(cfg.resetValue ?? 0)))]), ...body("spike")], unit));
+      if (p.blockClose) emit(p.blockClose);
       break;
     }
     case "toggleNode": {
       const v = stateVar(ctx, node, "state");
-      out.push(p.assign(v, inPort === "resetTrigger" ? p.bool(false) : p.not(v)));
+      emit(p.assign(v, inPort === "resetTrigger" ? p.bool(false) : p.not(v)));
       out.push(...chainFrom(ctx, node, "outTrigger", seen));
       break;
     }
     case "latchNode": {
       const v = stateVar(ctx, node, "state");
       // Set holds true, Reset holds false — the latch has only two commands.
-      if (inPort === "resetTrigger") out.push(p.assign(v, p.bool(false)));
-      else out.push(p.assign(v, p.bool(true)));
+      if (inPort === "resetTrigger") emit(p.assign(v, p.bool(false)));
+      else emit(p.assign(v, p.bool(true)));
       out.push(...chainFrom(ctx, node, "outTrigger", seen));
       break;
     }
     case "listAppendNode": {
       const v = stateVar(ctx, node, "items");
-      if (inPort === "resetTrigger") out.push(p.assign(v, literal(p, [])));
-      else out.push(p.listPush(v, inputExpr(ctx, node, "value")));
+      if (inPort === "resetTrigger") emit(p.assign(v, literal(p, [])));
+      else emit(p.listPush(v, inputExpr(ctx, node, "value")));
       out.push(...chainFrom(ctx, node, "outTrigger", seen));
       break;
     }
     case "valueListNode": {
       const v = stateVar(ctx, node, "values");
-      out.push(p.listPush(v, inputExpr(ctx, node, "value")));
+      emit(p.listPush(v, inputExpr(ctx, node, "value")));
       out.push(...chainFrom(ctx, node, "outTrigger", seen));
       break;
     }
     case "gateNode": {
       // Open uses the text-aware truthiness the runtime applies (toBool).
-      out.push(p.ifLine(`${requireHelper(ctx, "lb_to_bool")}(${inputExpr(ctx, node, "open")})`));
-      out.push(...indent(body("outTrigger"), unit));
-      if (p.blockClose) out.push(p.blockClose);
+      emit(p.ifLine(`${requireHelper(ctx, "lb_to_bool")}(${inputExpr(ctx, node, "open")})`));
+      out.push(...indentLines(body("outTrigger"), unit));
+      if (p.blockClose) emit(p.blockClose);
       break;
     }
     case "onceNode": {
       const fired = stateVar(ctx, node, "fired");
       if (inPort === "resetTrigger") {
-        out.push(p.assign(fired, p.bool(false))); // re-arm; Reset fires nothing on
+        emit(p.assign(fired, p.bool(false))); // re-arm; Reset fires nothing on
         break;
       }
-      out.push(p.ifLine(p.not(fired)));
-      out.push(...indent([p.assign(fired, p.bool(true)), ...body("outTrigger")], unit));
-      if (p.blockClose) out.push(p.blockClose);
+      emit(p.ifLine(p.not(fired)));
+      out.push(...indentLines([...own([p.assign(fired, p.bool(true))]), ...body("outTrigger")], unit));
+      if (p.blockClose) emit(p.blockClose);
       break;
     }
     case "sequenceNode": {
       const step = stateVar(ctx, node, "step");
       if (inPort === "resetTrigger") {
-        out.push(p.assign(step, "0"));
+        emit(p.assign(step, "0"));
         break;
       }
       // One output per incoming trigger, cycling. Emitted as three separate
@@ -173,24 +179,24 @@ export function stepInto(ctx: EmitCtx, node: GraphNode, inPort: string, seen: Se
       // the advance below, so exactly one branch runs.
       const ports = ["out1", "out2", "out3"];
       ports.forEach((port, i) => {
-        out.push(p.ifLine(`${step} % ${ports.length} == ${i}`));
-        out.push(...indent(body(port), unit));
-        if (p.blockClose) out.push(p.blockClose);
+        emit(p.ifLine(`${step} % ${ports.length} == ${i}`));
+        out.push(...indentLines(body(port), unit));
+        if (p.blockClose) emit(p.blockClose);
       });
-      out.push(p.assign(step, `(${step} + 1) % ${ports.length}`));
+      emit(p.assign(step, `(${step} + 1) % ${ports.length}`));
       break;
     }
     case "pythonScript": {
       const v = stateVar(ctx, node, "result");
       if (p.id === "python") {
         // Native target: the node's code runs as-is with x/y bound first.
-        out.push(p.assign("x", inputExpr(ctx, node, "x")));
-        out.push(p.assign("y", inputExpr(ctx, node, "y")));
-        out.push(...String(cfg.code ?? "").split("\n").filter((l) => l.trim() !== ""));
-        out.push(p.assign(v, "result"));
+        emit(p.assign("x", inputExpr(ctx, node, "x")));
+        emit(p.assign("y", inputExpr(ctx, node, "y")));
+        emit(...String(cfg.code ?? "").split("\n").filter((l) => l.trim() !== ""));
+        emit(p.assign(v, "result"));
       } else {
-        out.push(p.comment("Python Script node — port this block by hand:"));
-        out.push(...String(cfg.code ?? "").split("\n").filter((l) => l.trim() !== "").map((l) => p.comment(l)));
+        emit(p.comment("Python Script node — port this block by hand:"));
+        emit(...String(cfg.code ?? "").split("\n").filter((l) => l.trim() !== "").map((l) => p.comment(l)));
       }
       out.push(...chainFrom(ctx, node, "outTrigger", seen));
       break;
@@ -200,13 +206,13 @@ export function stepInto(ctx: EmitCtx, node: GraphNode, inPort: string, seen: Se
       const v = stateVar(ctx, node, "response");
       emitOllamaHelper(ctx);
       const model = literal(p, String(cfg.model ?? (node.type === "ollamaLLM" ? "llama3" : "llava")));
-      out.push(p.assign(v, `${p.id === "python" ? "ollama_generate" : "await ollamaGenerate"}(${model}, ${p.str(inputExpr(ctx, node, "prompt"))})`));
-      if (node.type === "ollamaVLM") out.push(p.comment("VLM image payload omitted — attach images via the Ollama API"));
+      emit(p.assign(v, `${p.id === "python" ? "ollama_generate" : "await ollamaGenerate"}(${model}, ${p.str(inputExpr(ctx, node, "prompt"))})`));
+      if (node.type === "ollamaVLM") emit(p.comment("VLM image payload omitted — attach images via the Ollama API"));
       out.push(...chainFrom(ctx, node, "outTrigger", seen));
       break;
     }
     default:
-      out.push(p.comment(`${node.data.label}: trigger port "${inPort}" has no code mapping`));
+      emit(p.comment(`${node.data.label}: trigger port "${inPort}" has no code mapping`));
       break;
   }
   return out;

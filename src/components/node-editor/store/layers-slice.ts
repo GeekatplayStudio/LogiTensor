@@ -2,6 +2,7 @@ import { StoreApi } from "zustand";
 import { Node } from "@xyflow/react";
 import { NodeData } from "@/types/nodes";
 import { toast } from "sonner";
+import { logEvent } from "@/lib/debug-log";
 import { Layer, NodeEditorState } from "./types";
 import { cloneLayerContents, syncHubs, uniqueId } from "./graph-helpers";
 
@@ -27,6 +28,7 @@ export const createLayersSlice = (set: Setter, get: Getter) => ({
     const newLayer: Layer = { id, name, nodes: [], edges: [] };
     set((state) => ({ layers: [...state.layers, newLayer] }));
     toast.success(`Created ${name}`);
+    logEvent("info", "graph", `Dimension created: ${name}`, `id: ${id}`);
   },
 
   duplicateLayer: (id: string) => {
@@ -54,6 +56,7 @@ export const createLayersSlice = (set: Setter, get: Getter) => ({
 
     set({ layers: [...syncedLayers, newLayer] });
     toast.success(`Duplicated "${sourceLayer.name}" to "${newLayer.name}"`);
+    logEvent("info", "graph", `Dimension duplicated: "${sourceLayer.name}" → "${newLayer.name}"`, `${cloned.nodes.length} node(s), ${cloned.edges.length} edge(s)`);
   },
 
   selectLayer: (id: string) => {
@@ -77,6 +80,8 @@ export const createLayersSlice = (set: Setter, get: Getter) => ({
       edges: target.edges,
     });
 
+    logEvent("info", "graph", `Switched to dimension "${target.name}"`, `${target.nodes.length} node(s), ${target.edges.length} edge(s)`);
+
     // Re-evaluate this layer's nodes so outputs broadcast from a multi-dimensional
     // node in another layer correctly propagate downstream in the newly active one.
     setTimeout(() => {
@@ -90,6 +95,7 @@ export const createLayersSlice = (set: Setter, get: Getter) => ({
     const { activeLayerId, layers } = get();
     if (layers.length <= 1) {
       toast.error("Cannot delete the last remaining dimension!");
+      logEvent("warn", "graph", "Refused to delete the last remaining dimension");
       return;
     }
     const filtered = layers.filter((l) => l.id !== id);
@@ -106,6 +112,7 @@ export const createLayersSlice = (set: Setter, get: Getter) => ({
       set({ layers: filtered });
     }
     toast.success("Dimension collapsed.");
+    logEvent("info", "graph", `Dimension deleted: ${layers.find((l) => l.id === id)?.name ?? id}`);
   },
 
   setIsLayersViewOpen: (open: boolean) => {

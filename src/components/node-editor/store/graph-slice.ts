@@ -9,6 +9,7 @@ import {
 import { NodeData, NODE_DEFINITIONS } from "@/types/nodes";
 import { idleEdgeStyle } from "@/lib/edge-styles";
 import { toast } from "sonner";
+import { logEvent } from "@/lib/debug-log";
 import { NodeEditorState } from "./types";
 import { adjustFormulaInputs, nextUniqueIdSuffix, uniqueId } from "./graph-helpers";
 
@@ -48,11 +49,17 @@ export const createGraphSlice = (set: Setter, get: Getter) => ({
     const { nodes } = get();
     const sourceNode = nodes.find((n) => n.id === source);
     const targetNode = nodes.find((n) => n.id === target);
-    if (!sourceNode || !targetNode) return;
+    if (!sourceNode || !targetNode) {
+      logEvent("warn", "graph", "Connection rejected: endpoint node not found", `${source}.${sourceHandle} → ${target}.${targetHandle}`);
+      return;
+    }
 
     const sourcePort = sourceNode.data.outputs.find((o) => o.id === sourceHandle);
     const targetPort = targetNode.data.inputs.find((i) => i.id === targetHandle);
-    if (!sourcePort || !targetPort) return;
+    if (!sourcePort || !targetPort) {
+      logEvent("warn", "graph", "Connection rejected: port not found", `${sourceNode.data.label}.${sourceHandle} → ${targetNode.data.label}.${targetHandle}`);
+      return;
+    }
 
     // Guardrail: Socket types must match (trigger to trigger, data to data)
     // — except a boolean/number/any data output may also drive a trigger
@@ -64,8 +71,21 @@ export const createGraphSlice = (set: Setter, get: Getter) => ({
 
     if (sourcePort.type !== targetPort.type && !isHybridTrigger) {
       toast.error(`Cannot connect execution flow to data value. Sockets must match: ${sourcePort.type} to ${targetPort.type}.`);
+      logEvent(
+        "warn",
+        "graph",
+        `Connection rejected: ${sourceNode.data.label}.${sourcePort.id} → ${targetNode.data.label}.${targetPort.id}`,
+        `Socket types must match: ${sourcePort.type} (${sourcePort.dataType ?? "-"}) → ${targetPort.type}`
+      );
       return;
     }
+
+    logEvent(
+      "info",
+      "graph",
+      `Connected ${sourceNode.data.label}.${sourcePort.id} → ${targetNode.data.label}.${targetPort.id}`,
+      isHybridTrigger ? "hybrid data → trigger edge (fires on rising edge)" : undefined
+    );
 
     set((state) => {
       // Data inputs can only have at most one connection
@@ -111,6 +131,11 @@ export const createGraphSlice = (set: Setter, get: Getter) => ({
   },
 
   disconnectHandle: (nodeId: string, handleId: string, type: "source" | "target") => {
+    logEvent(
+      "info",
+      "graph",
+      `Disconnected ${get().nodes.find((n) => n.id === nodeId)?.data.label ?? nodeId}.${handleId} (${type})`
+    );
     set((state) => {
       const edges = state.edges.filter((edge) => {
         if (type === "target") {
@@ -136,7 +161,10 @@ export const createGraphSlice = (set: Setter, get: Getter) => ({
 
   addNode: (type: string, x: number, y: number) => {
     const def = NODE_DEFINITIONS[type];
-    if (!def) return;
+    if (!def) {
+      logEvent("error", "graph", `Cannot add node: unknown type "${type}"`);
+      return;
+    }
 
     const id = `${type}_${Date.now()}`;
     const newNode: Node<NodeData> = {
@@ -163,15 +191,22 @@ export const createGraphSlice = (set: Setter, get: Getter) => ({
     }, 0);
 
     toast.success(`Added ${def.label}`);
+    logEvent("info", "graph", `Node added: ${def.label}`, `id: ${id} · at (${Math.round(x)}, ${Math.round(y)})`);
   },
 
   deleteNode: (id: string) => {
     const { nodes } = get();
-    const sharedId = nodes.find((n) => n.id === id)?.data.config?.sharedId;
+    const target = nodes.find((n) => n.id === id);
+    const sharedId = target?.data.config?.sharedId;
 
     set((state) => ({
       nodes: state.nodes.filter((n) => n.id !== id),
       edges: state.edges.filter((e) => e.source !== id && e.target !== id),
+      // A breakpoint on a node that no longer exists would never be hit and
+      // would leak into saved state — drop it with the node.
+      breakpoints: state.breakpoints[id]
+        ? Object.fromEntries(Object.entries(state.breakpoints).filter(([k]) => k !== id)) as Record<string, true>
+        : state.breakpoints,
       // Deleting a multi-dimensional node's origin also removes its clones everywhere else.
       layers: sharedId
         ? state.layers.map((l) => {
@@ -188,6 +223,7 @@ export const createGraphSlice = (set: Setter, get: Getter) => ({
         : state.layers,
     }));
     toast.success("Node deleted");
+    logEvent("info", "graph", `Node deleted: ${target?.data.label ?? id}`, `id: ${id}`);
   },
 
   deleteSelectedNodes: () => {
@@ -209,6 +245,12 @@ export const createGraphSlice = (set: Setter, get: Getter) => ({
       edges: internalEdges.map((e) => ({ ...e })),
     };
     toast.success(`Copied ${selected.length} node${selected.length > 1 ? "s" : ""}`);
+    logEvent(
+      "info",
+      "graph",
+      `Copied ${selected.length} node(s), ${internalEdges.length} edge(s)`,
+      selected.map((n) => n.data.label).join(", ")
+    );
   },
 
   pasteClipboard: () => {
@@ -246,11 +288,15 @@ export const createGraphSlice = (set: Setter, get: Getter) => ({
       setTimeout(() => get().evaluateNode(n.id), 0);
     });
     toast.success(`Pasted ${pastedNodes.length} node${pastedNodes.length > 1 ? "s" : ""}`);
+    logEvent("info", "graph", `Pasted ${pastedNodes.length} node(s), ${pastedEdges.length} edge(s)`);
   },
 
   clearBoard: () => {
-    set({ nodes: [], edges: [] });
+    const { nodes, edges } = get();
+    // Breakpoints reference node ids that are all gone now.
+    set({ nodes: [], edges: [], breakpoints: {} });
     toast.success("Board cleared");
+    logEvent("warn", "graph", `Board cleared — removed ${nodes.length} node(s), ${edges.length} edge(s)`);
   },
 
   updateNodeConfig: (id: string, newConfig: Record<string, any>) => {

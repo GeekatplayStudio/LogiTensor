@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Copy, Check, Code2, Pencil, Undo2, Loader2, ArrowLeftRight } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Copy, Check, Code2, Pencil, Undo2, Loader2, ArrowLeftRight, CircleOff } from "lucide-react";
 import { toast } from "sonner";
 import {
   Select,
@@ -13,6 +13,17 @@ import {
 import { useNodeEditorStore } from "./use-node-editor-store";
 import { generateCode, CODE_TARGETS } from "@/lib/codegen";
 import { buildNodeSchema, materializeNlGraph } from "@/lib/nl-apply";
+import CodeViewer from "./code-viewer";
+
+/** Compact one-line rendering of a port value for the inline value chip. */
+function formatValue(v: unknown): string {
+  if (v === null || v === undefined) return "null";
+  if (typeof v === "boolean") return v ? "true" : "false";
+  if (Array.isArray(v)) return `[${v.length}]`;
+  if (typeof v === "object") return "{…}";
+  const s = String(v);
+  return s.length > 18 ? `${s.slice(0, 15)}…` : s;
+}
 
 const TARGET_STORAGE_KEY = "logitensor-code-target";
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -24,13 +35,28 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 export default function CodePanel() {
   const nodes = useNodeEditorStore((s) => s.nodes);
   const edges = useNodeEditorStore((s) => s.edges);
+  const breakpoints = useNodeEditorStore((s) => s.breakpoints);
+  const toggleBreakpoint = useNodeEditorStore((s) => s.toggleBreakpoint);
+  const clearBreakpoints = useNodeEditorStore((s) => s.clearBreakpoints);
   const [target, setTarget] = useState("typescript");
-  const [html, setHtml] = useState("");
   const [copied, setCopied] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [applying, setApplying] = useState(false);
-  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // The node the engine is executing right now drives the active-line
+  // highlight; its freshly-computed outputs are shown beside that line.
+  const activeNodeId = nodes.find((n) => n.data.executionState === "running")?.id;
+  const nodeValues = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const n of nodes) {
+      const parts = n.data.outputs
+        .filter((o) => o.type === "data" && o.value !== undefined)
+        .map((o) => `${o.name}=${formatValue(o.value)}`);
+      if (parts.length) out[n.id] = parts.join("  ");
+    }
+    return out;
+  }, [nodes]);
 
   // Persisted target choice — restored once after mount. Deferred via
   // timeout so hydration renders the same default the server did (no
@@ -44,27 +70,7 @@ export default function CodePanel() {
   }, []);
 
   const result = useMemo(() => generateCode(nodes, edges, target), [nodes, edges, target]);
-
-  useEffect(() => {
-    // Debounced highlight: shiki is imported dynamically so its grammars stay
-    // out of the initial bundle, and rapid node drags don't re-highlight.
-    if (editing) return; // the textarea owns the view while editing
-    if (debounce.current) clearTimeout(debounce.current);
-    debounce.current = setTimeout(async () => {
-      const grammar = CODE_TARGETS.find((t) => t.id === target)?.grammar ?? "typescript";
-      try {
-        const { codeToHtml } = await import("shiki");
-        setHtml(await codeToHtml(result.code, { lang: grammar, theme: "vitesse-dark" }));
-      } catch {
-        // Highlighting is cosmetic — fall back to plain text rather than
-        // hiding the code if a grammar fails to load.
-        setHtml(`<pre>${result.code.replace(/</g, "&lt;")}</pre>`);
-      }
-    }, 250);
-    return () => {
-      if (debounce.current) clearTimeout(debounce.current);
-    };
-  }, [result.code, target, editing]);
+  const grammar = CODE_TARGETS.find((t) => t.id === target)?.grammar ?? "typescript";
 
   const copy = async () => {
     await navigator.clipboard.writeText(result.code);
@@ -159,6 +165,15 @@ export default function CodePanel() {
           </>
         ) : (
           <>
+            {Object.keys(breakpoints).length > 0 && (
+              <button
+                onClick={clearBreakpoints}
+                className="p-1.5 rounded text-red-400/80 hover:text-red-300 hover:bg-zinc-800 transition cursor-pointer"
+                title={`Clear ${Object.keys(breakpoints).length} breakpoint(s)`}
+              >
+                <CircleOff className="w-3.5 h-3.5" />
+              </button>
+            )}
             <button
               onClick={startEditing}
               className="p-1.5 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition cursor-pointer"
@@ -203,11 +218,13 @@ export default function CodePanel() {
           className="flex-1 w-full resize-none bg-zinc-950 text-zinc-200 font-mono text-[11px] leading-relaxed p-3 outline-none scrollbar-thin"
         />
       ) : (
-        <div
-          className="flex-1 overflow-auto scrollbar-thin text-[11px] leading-relaxed [&_pre]:p-3 [&_pre]:min-h-full [&_pre]:bg-transparent! font-mono"
-          // shiki output is generated locally from our own code string — not
-          // user-controlled HTML.
-          dangerouslySetInnerHTML={{ __html: html }}
+        <CodeViewer
+          lines={result.lines}
+          grammar={grammar}
+          activeNodeId={activeNodeId}
+          breakpoints={breakpoints}
+          onToggleBreakpoint={toggleBreakpoint}
+          nodeValues={nodeValues}
         />
       )}
     </div>

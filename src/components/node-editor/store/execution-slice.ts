@@ -13,7 +13,9 @@ import {
   resolveNodeInputs,
 } from "./graph-helpers";
 import { runTriggerLogic } from "./trigger-logic";
-import { pauseGate, replayTrace, updateLayerEdges, updateLayerInputs, updateLayerNodes } from "./run-all-helpers";
+import { breakpointGate, nodeLabelOf, pauseGate } from "./run-all-helpers";
+import { executeRunAll } from "./run-all-backend";
+import { logEvent } from "@/lib/debug-log";
 
 type Setter = StoreApi<NodeEditorState>["setState"];
 type Getter = StoreApi<NodeEditorState>["getState"];
@@ -22,8 +24,39 @@ export const createExecutionSlice = (set: Setter, get: Getter) => ({
   dataTriggerState: {} as Record<string, boolean>,
   isPaused: false,
   stepRequested: false,
-  setIsPaused: (paused: boolean) => set({ isPaused: paused, stepRequested: false }),
-  stepOnce: () => set({ stepRequested: true }),
+  breakpoints: {} as Record<string, true>,
+
+  setIsPaused: (paused: boolean) => {
+    set({ isPaused: paused, stepRequested: false });
+    logEvent("info", "exec", paused ? "Execution paused" : "Execution resumed");
+  },
+
+  stepOnce: () => {
+    set({ stepRequested: true });
+    logEvent("debug", "exec", "Step requested");
+  },
+
+  toggleBreakpoint: (nodeId: string) => {
+    const label = nodeLabelOf(get, nodeId);
+    set((state) => {
+      const next = { ...state.breakpoints };
+      if (next[nodeId]) delete next[nodeId];
+      else next[nodeId] = true;
+      return { breakpoints: next };
+    });
+    logEvent(
+      "info",
+      "exec",
+      `${get().breakpoints[nodeId] ? "Breakpoint set" : "Breakpoint cleared"}: ${label}`
+    );
+  },
+
+  clearBreakpoints: () => {
+    const count = Object.keys(get().breakpoints).length;
+    if (count === 0) return;
+    set({ breakpoints: {} });
+    logEvent("info", "exec", `Cleared ${count} breakpoint(s)`);
+  },
 
   // Evaluate a node's output data variables reactively
   evaluateNode: (nodeId: string) => {
@@ -67,6 +100,7 @@ export const createExecutionSlice = (set: Setter, get: Getter) => ({
       } catch (err: any) {
         executionState = "error";
         errorMessage = err.message || "Evaluation error";
+        logEvent("error", "exec", `Evaluate failed: ${node.data.label}`, errorMessage);
       }
 
       // Broadcast the single combined output onto every dimension's instance.
@@ -96,6 +130,7 @@ export const createExecutionSlice = (set: Setter, get: Getter) => ({
       } catch (err: any) {
         executionState = "error";
         errorMessage = err.message || "Evaluation error";
+        logEvent("error", "exec", `Evaluate failed: ${node.data.label}`, errorMessage);
       }
 
       set((state) => ({
@@ -166,6 +201,16 @@ export const createExecutionSlice = (set: Setter, get: Getter) => ({
     const targetNode = nodes.find((n) => n.id === targetNodeId);
     if (!targetNode) return;
 
+    const sourceLabel = nodes.find((n) => n.id === nodeId)?.data.label ?? nodeId;
+    logEvent(
+      "debug",
+      "exec",
+      `Trigger: ${sourceLabel}.${outputPortId} → ${targetNode.data.label}.${targetPortId ?? "?"}`
+    );
+
+    // Stop before the target node runs if a breakpoint is armed on it.
+    await breakpointGate(get, set, targetNodeId);
+
     // 1. Indicate the node is processing/running, and light up the trigger
     // wire carrying this signal so you can see execution travel through it.
     set((state) => ({
@@ -196,6 +241,10 @@ export const createExecutionSlice = (set: Setter, get: Getter) => ({
       targetNodeId,
       targetPortId || ""
     );
+
+    if (status === "error") {
+      logEvent("error", "exec", `Trigger failed: ${targetNode.data.label}`, errorMsg);
+    }
 
     // Mark execution status; settle the trigger wire into lit (success)
     // or dim (error) rather than leaving it mid-animation.
@@ -245,6 +294,11 @@ export const createExecutionSlice = (set: Setter, get: Getter) => ({
   fireTriggerInput: async (nodeId: string, portId: string) => {
     if (!get().nodes.some((n) => n.id === nodeId)) return;
 
+    logEvent("debug", "exec", `Rising edge fired: ${nodeLabelOf(get, nodeId)}.${portId}`);
+
+    // Breakpoints apply to data-driven trigger fires too, not just wired ones.
+    await breakpointGate(get, set, nodeId);
+
     set((state) => ({
       nodes: state.nodes.map((n) =>
         n.id === nodeId ? { ...n, data: { ...n.data, executionState: "running" as const } } : n
@@ -252,6 +306,10 @@ export const createExecutionSlice = (set: Setter, get: Getter) => ({
     }));
 
     const { nextTriggerPort, status, errorMsg } = await runTriggerLogic(get, set, nodeId, portId);
+
+    if (status === "error") {
+      logEvent("error", "exec", `Trigger failed: ${nodeLabelOf(get, nodeId)}`, errorMsg);
+    }
 
     set((state) => ({
       nodes: state.nodes.map((n) =>
@@ -276,124 +334,8 @@ export const createExecutionSlice = (set: Setter, get: Getter) => ({
     }
   },
 
-  runAll: async () => {
-    if (get().isRunning) return;
-    set({ isRunning: true });
-
-    const { runLoops, stepDelayMs } = get();
-    const loopsCount = runLoops || 1;
-
-    const toastId = toast.loading(`Starting execution loop (0/${loopsCount})...`);
-    get().resetExecutionStates();
-
-    try {
-      for (let i = 0; i < loopsCount; i++) {
-        if (loopsCount > 1) {
-          toast.loading(`Executing loop (${i + 1}/${loopsCount})...`, { id: toastId });
-        }
-
-        // Save current canvas layout to layers slot before compiling
-        const { activeLayerId, nodes, edges, layers } = get();
-        const currentLayers = layers.map((l) => {
-          if (l.id === activeLayerId) {
-            return { ...l, nodes, edges };
-          }
-          return l;
-        });
-
-        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-        const response = await fetch(`${apiBaseUrl}/run`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            activeLayerId,
-            layers: currentLayers,
-          }),
-        });
-
-        if (!response.ok) {
-          let errorDetail = response.statusText;
-          try {
-            const errJson = await response.json();
-            if (errJson && errJson.detail) {
-              errorDetail = errJson.detail;
-            }
-          } catch {
-            // ignore parsing error
-          }
-          throw new Error(`FastAPI Server error: ${errorDetail}`);
-        }
-
-        const res = await response.json();
-        console.log("[Execution Result]", res);
-
-        if (res.success) {
-          // Walk the backend's execution order first so the canvas highlights
-          // one node at a time at the configured Delay. Skipped at delay 0 so
-          // "as fast as possible" stays instant.
-          if (Array.isArray(res.trace) && res.trace.length > 0 && get().stepDelayMs > 0) {
-            await replayTrace(get, set, res.trace, res.outputs);
-          }
-
-          // Then settle the full result across ALL dimension slots (this also
-          // covers passive data nodes, which never appear in the trace).
-          set((state) => {
-            // 1. Process active nodes
-            const updatedActiveNodesOutputs = updateLayerNodes(state.nodes, res.outputs);
-            const updatedActiveEdges = updateLayerEdges(state.edges, updatedActiveNodesOutputs);
-            const updatedActiveNodes = updateLayerInputs(updatedActiveNodesOutputs, updatedActiveEdges, res.outputs);
-
-            // 2. Process all dimensions
-            const updatedLayers = state.layers.map((layer) => {
-              if (layer.id === state.activeLayerId) {
-                return { ...layer, nodes: updatedActiveNodes, edges: updatedActiveEdges };
-              }
-              const layerNodesOutputs = updateLayerNodes(layer.nodes, res.outputs);
-              const layerEdges = updateLayerEdges(layer.edges, layerNodesOutputs);
-              const layerNodes = updateLayerInputs(layerNodesOutputs, layerEdges, res.outputs);
-              return { ...layer, nodes: layerNodes, edges: layerEdges };
-            });
-
-            return {
-              nodes: updatedActiveNodes,
-              edges: updatedActiveEdges,
-              layers: updatedLayers,
-            };
-          });
-        } else {
-          throw new Error(res.error || "Compilation failed");
-        }
-
-        // Sleep between loops if loopsCount > 1
-        if (i < loopsCount - 1) {
-          await new Promise((resolve) => setTimeout(resolve, Math.max(100, stepDelayMs)));
-        }
-      }
-
-      toast.dismiss(toastId);
-      toast.success(loopsCount > 1 ? `Completed ${loopsCount} loops successfully!` : "LangGraph execution completed successfully!");
-      console.log("=== LangGraph Execution Completed ===");
-    } catch (err: any) {
-      toast.dismiss(toastId);
-      toast.error(`LangGraph run failed: ${err.message}. Make sure Python FastAPI is running on port 8000.`);
-
-      // Update execution state to error for all nodes
-      set((state) => ({
-        nodes: state.nodes.map((n) => ({
-          ...n,
-          data: {
-            ...n.data,
-            executionState: "error" as const,
-            errorMessage: err.message,
-          },
-        })),
-      }));
-    } finally {
-      set({ isRunning: false });
-    }
-  },
+  // Backend compile + run lives in run-all-backend.ts (500-line guardrail).
+  runAll: () => executeRunAll(get, set),
 
   // Visual run-through: fires every Manual Trigger in sequence on the live
   // canvas (values light up edge-by-edge), then reads every Expected Value
@@ -405,6 +347,7 @@ export const createExecutionSlice = (set: Setter, get: Getter) => ({
       const triggers = get().nodes.filter((n) => n.type === "triggerInput");
       if (triggers.length === 0) {
         toast.warning("No Manual Trigger nodes to fire.");
+        logEvent("warn", "exec", "Run tests: no Manual Trigger nodes on the board");
         return;
       }
       for (const t of triggers) {
@@ -429,10 +372,13 @@ export const createExecutionSlice = (set: Setter, get: Getter) => ({
       }
       if (asserts.length === 0) {
         toast.success(`Fired ${triggers.length} trigger(s). Add Expected Value nodes to assert results.`);
+        logEvent("info", "exec", `Fired ${triggers.length} trigger(s); no expectations to check`);
       } else if (passed === asserts.length) {
         toast.success(`All ${asserts.length} expectation(s) passed ✔`);
+        logEvent("success", "exec", `All ${asserts.length} expectation(s) passed`);
       } else {
         toast.error(`${asserts.length - passed} of ${asserts.length} expectation(s) failed`);
+        logEvent("error", "exec", `${asserts.length - passed} of ${asserts.length} expectation(s) failed`);
       }
     } finally {
       set({ isRunning: false });

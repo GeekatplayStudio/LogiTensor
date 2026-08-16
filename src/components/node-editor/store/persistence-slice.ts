@@ -1,5 +1,6 @@
 import { StoreApi } from "zustand";
 import { toast } from "sonner";
+import { logEvent } from "@/lib/debug-log";
 import { NodeEditorState } from "./types";
 import { syncHubs } from "./graph-helpers";
 
@@ -29,6 +30,12 @@ export const createPersistenceSlice = (set: Setter, get: Getter) => ({
     link.click();
     document.body.removeChild(link);
     toast.success("All dimensions saved successfully");
+    logEvent(
+      "success",
+      "io",
+      `Saved ${link.download}`,
+      `${hubs.length} hub(s), ${liveLayers.length} dimension(s), ${state.nodes.length} node(s), ${state.edges.length} edge(s)`
+    );
   },
 
   loadFromFile: (jsonContent: string) => {
@@ -82,9 +89,17 @@ export const createPersistenceSlice = (set: Setter, get: Getter) => ({
           get().evaluateNode(n.id);
         }
       }, 50);
+      const loaded = get();
       toast.success("Algorithm loaded successfully");
+      logEvent(
+        "success",
+        "io",
+        "Algorithm loaded",
+        `${loaded.hubs.length} hub(s), ${loaded.layers.length} dimension(s), ${loaded.nodes.length} node(s), ${loaded.edges.length} edge(s)`
+      );
     } catch (err: any) {
       toast.error(`Failed to load algorithm: ${err.message}`);
+      logEvent("error", "io", "Failed to load algorithm", err?.message ?? String(err));
     }
   },
 });

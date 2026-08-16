@@ -14,26 +14,32 @@ import {
   HelpCircle,
   Info,
   Box,
+  Repeat,
+  Timer,
+  Terminal as TerminalIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
 import { useNodeEditorStore } from "./use-node-editor-store";
 
 // Compact header toolbar: everything except the primary Run action is an
 // icon-only button with a hover tooltip (native title), per the minimal-UI
 // requirement. Extracted from page.tsx so the page stays a layout shell.
 
+// Compact icon-only buttons; every one carries a hover tooltip so the bar
+// stays minimal without hiding what things do.
 const iconBtn =
-  "h-8 w-8 p-0 bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200";
+  "h-7 w-7 p-0 bg-transparent border-zinc-800/70 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100";
 
 export default function Toolbar({
   onHelp,
   onAbout,
   onToggle3D,
+  onToggleTerminal,
 }: {
   onHelp: () => void;
   onAbout: () => void;
   onToggle3D: () => void;
+  onToggleTerminal: () => void;
 }) {
   const isRunning = useNodeEditorStore((s) => s.isRunning);
   const runAll = useNodeEditorStore((s) => s.runAll);
@@ -109,8 +115,10 @@ export default function Toolbar({
         </Button>
       )}
 
-      <div className="flex items-center gap-2 bg-zinc-900/60 border border-zinc-800/80 px-2.5 h-8 rounded-md" title="How many times Run repeats the whole flow">
-        <span className="text-[9px] uppercase font-extrabold text-zinc-500 tracking-wider">Loops</span>
+      {/* Loops and Delay as icon + number rather than labelled boxes with a
+          slider — same control, roughly a third of the width. */}
+      <div className="flex items-center gap-1 h-7 px-1.5 rounded border border-zinc-800/70" title="Loops — how many times Run repeats the whole flow">
+        <Repeat className="w-3 h-3 text-zinc-500" />
         <input
           type="number"
           min={1}
@@ -118,24 +126,24 @@ export default function Toolbar({
           value={runLoops}
           onChange={(e) => setRunLoops(Math.max(1, Math.min(100, Number(e.target.value) || 1)))}
           disabled={isRunning}
-          className="w-9 h-5 text-[10px] font-mono font-bold text-center bg-zinc-950 border border-zinc-800 text-zinc-100 rounded focus:outline-none focus:border-zinc-700"
+          className="w-7 h-5 text-[10px] font-mono font-bold text-center bg-transparent text-zinc-200 focus:outline-none"
         />
       </div>
 
-      <div className="flex items-center gap-2 bg-zinc-900/60 border border-zinc-800/80 px-2.5 h-8 rounded-md min-w-[150px]" title="Delay between trigger hops (visual pacing)">
-        <span className="text-[9px] uppercase font-extrabold text-zinc-500 tracking-wider">Delay</span>
-        <Slider
+      <div className="flex items-center gap-1 h-7 px-1.5 rounded border border-zinc-800/70" title="Delay in ms between execution steps — paces the run so you can watch it (0 = instant)">
+        <Timer className="w-3 h-3 text-zinc-500" />
+        <input
+          type="number"
           min={0}
-          max={2000}
+          max={5000}
           step={50}
-          value={[stepDelayMs]}
-          onValueChange={(val: any) => setStepDelayMs(Array.isArray(val) ? val[0] : val)}
-          className="w-14 cursor-pointer"
+          value={stepDelayMs}
+          onChange={(e) => setStepDelayMs(Math.max(0, Math.min(5000, Number(e.target.value) || 0)))}
+          className="w-10 h-5 text-[10px] font-mono font-bold text-center bg-transparent text-amber-400 focus:outline-none"
         />
-        <span className="text-[10px] font-mono text-amber-400 font-bold min-w-[38px] text-right">{stepDelayMs}ms</span>
       </div>
 
-      <div className="w-px h-5 bg-zinc-800 mx-0.5" />
+      <div className="w-px h-4 bg-zinc-800/70 mx-0.5" />
 
       <Button variant="outline" size="sm" onClick={resetExecutionStates} className={iconBtn} title="Reset node statuses and clear edge values">
         <RotateCcw className="w-3.5 h-3.5" />
@@ -144,7 +152,7 @@ export default function Toolbar({
         <Trash2 className="w-3.5 h-3.5" />
       </Button>
 
-      <div className="w-px h-5 bg-zinc-800 mx-0.5" />
+      <div className="w-px h-4 bg-zinc-800/70 mx-0.5" />
 
       <Button variant="outline" size="sm" onClick={saveToFile} className={iconBtn} title="Export algorithm to JSON">
         <Download className="w-3.5 h-3.5" />
@@ -154,8 +162,11 @@ export default function Toolbar({
       </Button>
       <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".json" className="hidden" />
 
-      <div className="w-px h-5 bg-zinc-800 mx-0.5" />
+      <div className="w-px h-4 bg-zinc-800/70 mx-0.5" />
 
+      <Button variant="outline" size="sm" onClick={onToggleTerminal} className={`${iconBtn} hover:!text-sky-300`} title="Toggle the output terminal">
+        <TerminalIcon className="w-3.5 h-3.5" />
+      </Button>
       <Button variant="outline" size="sm" onClick={onToggle3D} className={`${iconBtn} hover:!text-cyan-300`} title="Flow 3D preview (three.js)">
         <Box className="w-3.5 h-3.5" />
       </Button>

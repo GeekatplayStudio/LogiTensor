@@ -1,4 +1,5 @@
 import { safeEvaluate } from "./safe-evaluator";
+import { logEvent } from "./debug-log";
 // The node library grew past what one module can hold under the repo's
 // 500-line guardrail, so the newer nodes register their pure computations and
 // trigger behaviour through these registries instead of inline switch cases.
@@ -360,6 +361,9 @@ export async function handleTriggerOperation(
     }`;
     const logs = [...(config.logs ?? []), logStr];
     updatedConfig = { ...config, logs };
+    // Mirror the node's own log line into the app terminal so Log nodes are
+    // readable without opening each node's panel.
+    logEvent("info", "exec", `Log node: ${logStr}`);
     nextTriggerPort = "outTrigger";
   } 
   else if (type === "delayNode") {

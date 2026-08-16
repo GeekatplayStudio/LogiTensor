@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
-import { Group, Panel, Separator } from "react-resizable-panels";
+import { Group, Panel, Separator, usePanelRef } from "react-resizable-panels";
 import Sidebar from "@/components/node-editor/sidebar";
 import Canvas from "@/components/node-editor/canvas";
 import Toolbar from "@/components/node-editor/toolbar";
 import NlInputBar from "@/components/node-editor/nl-input-bar";
 import CodePanel from "@/components/node-editor/code-panel";
+import TerminalPanel from "@/components/node-editor/terminal-panel";
 import LayersStackView from "@/components/node-editor/layers-stack-view";
 import HelpAboutModal from "@/components/node-editor/help-about-modal";
 import { useNodeEditorStore } from "@/components/node-editor/use-node-editor-store";
@@ -28,6 +29,15 @@ export default function Home() {
 
   const [helpTab, setHelpTab] = useState<"help" | "about" | null>(null);
   const [is3DOpen, setIs3DOpen] = useState(false);
+  // Imperative handle so the toolbar button can collapse/expand the terminal
+  // without unmounting it (which would lose its scroll position and sizing).
+  const terminalRef = usePanelRef();
+  const toggleTerminal = () => {
+    const panel = terminalRef.current;
+    if (!panel) return;
+    if (panel.isCollapsed()) panel.expand();
+    else panel.collapse();
+  };
 
   // Keyboard controls for the 3D deck carousel + closing the 3D preview
   useEffect(() => {
@@ -57,29 +67,33 @@ export default function Home() {
     // `relative` anchors the AI activity overlay to the app shell's bottom.
     <div className="relative flex flex-col h-dvh w-full overflow-hidden bg-zinc-950 text-zinc-100 select-none">
       {/* Top Navbar */}
-      <header className="h-14 border-b border-zinc-900 bg-zinc-950 flex items-center justify-between px-4 z-20 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 shadow-[0_0_15px_rgba(245,158,11,0.4)]">
-            <Layers className="w-4 h-4 text-zinc-950" />
+      {/* Slim header: one line, small mark, branding collapsed into a tooltip
+          so the toolbar gets the width instead of the wordmark. */}
+      <header className="h-10 border-b border-zinc-900 bg-zinc-950 flex items-center justify-between px-3 z-20 shrink-0">
+        <div className="flex items-center gap-2 shrink-0" title="LogiTensor Visual Editor — Geekatplay Studio">
+          <div className="flex items-center justify-center w-6 h-6 rounded-md bg-gradient-to-br from-amber-500 to-orange-600 shadow-[0_0_10px_rgba(245,158,11,0.35)]">
+            <Layers className="w-3.5 h-3.5 text-zinc-950" />
           </div>
-          <div className="flex flex-col">
-            <span className="font-black text-sm uppercase tracking-wider bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
-              Geekatplay Studio
-            </span>
-            <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest leading-none mt-0.5">
-              LogiTensor Visual Editor
-            </span>
-          </div>
+          <span className="font-black text-[11px] uppercase tracking-wider bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
+            LogiTensor
+          </span>
         </div>
-        <Toolbar onHelp={() => setHelpTab("help")} onAbout={() => setHelpTab("about")} onToggle3D={() => setIs3DOpen(true)} />
+        <Toolbar
+          onHelp={() => setHelpTab("help")}
+          onAbout={() => setHelpTab("about")}
+          onToggle3D={() => setIs3DOpen(true)}
+          onToggleTerminal={toggleTerminal}
+        />
       </header>
 
       {/* Natural-language flow builder — its own slim row above the workspace */}
       <NlInputBar />
 
-      {/* Workspace: resizable/collapsible [palette | canvas | code] panels.
-          Drag a separator to resize; drag past a panel's min size to collapse. */}
-      <Group orientation="horizontal" className="flex-1 min-h-0">
+      {/* Workspace over terminal. Both directions are resizable and every
+          side/bottom panel collapses, VS Code style. */}
+      <Group orientation="vertical" className="flex-1 min-h-0">
+        <Panel id="workspace" minSize="30%" className="min-h-0">
+          <Group orientation="horizontal" className="h-full min-h-0">
         <Panel id="palette" defaultSize="16%" minSize="170px" collapsible collapsedSize={0} className="h-full min-w-0">
           <Sidebar />
         </Panel>
@@ -129,9 +143,24 @@ export default function Home() {
             </div>
           </div>
         </Panel>
-        <Separator className="w-1 bg-zinc-900 hover:bg-emerald-700/50 transition-colors" title="Drag to resize — drag fully right to collapse the code panel" />
-        <Panel id="code" defaultSize="26%" minSize="200px" collapsible collapsedSize={0} className="h-full min-w-0">
-          <CodePanel />
+            <Separator className="w-1 bg-zinc-900 hover:bg-emerald-700/50 transition-colors" title="Drag to resize — drag fully right to collapse the code panel" />
+            <Panel id="code" defaultSize="26%" minSize="200px" collapsible collapsedSize={0} className="h-full min-w-0">
+              <CodePanel />
+            </Panel>
+          </Group>
+        </Panel>
+
+        <Separator className="h-1 bg-zinc-900 hover:bg-sky-700/50 transition-colors" title="Drag to resize the terminal — drag fully down to collapse it" />
+        <Panel
+          id="terminal"
+          panelRef={terminalRef}
+          defaultSize="24%"
+          minSize="72px"
+          collapsible
+          collapsedSize={0}
+          className="min-h-0"
+        >
+          <TerminalPanel />
         </Panel>
       </Group>
 

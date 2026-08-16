@@ -63,8 +63,3 @@ export class NameAllocator {
     return name;
   }
 }
-
-/** Prefix every line with one indent unit (2 spaces in JS, 4 in Python). */
-export function indent(lines: string[], unit: string): string[] {
-  return lines.map((l) => (l === "" ? l : unit + l));
-}

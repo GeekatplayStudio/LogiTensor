@@ -2,6 +2,14 @@
 // emission (the ash-mesh jsLineToC approach). Each adapter is a rule table +
 // honest TODO bailouts for constructs it can't map — no LLM, fully offline.
 // JS is the source because its expression syntax is already C-family-shaped.
+//
+// Adapters work on CodeLine[], not a raw string: they drop lines (the JS-only
+// `const sleep =` / `main();`) and prepend headers, so per-line node
+// attribution has to travel with the text rather than be re-derived from a
+// line index afterwards.
+
+import type { CodeLine } from "./types";
+import { tag } from "./lines";
 
 interface AdapterRule {
   from: RegExp;
@@ -38,22 +46,55 @@ function adaptLine(line: string, rules: AdapterRule[], bailPatterns: RegExp[], t
   return out;
 }
 
+/**
+ * Shared body pass for every derived target: drop the JS-only bootstrap lines,
+ * rewrite each remaining one, and carry its nodeId across untouched. `post` is
+ * the per-target fixup that previously ran on the joined string — every one of
+ * them is line-local, so running it per line is equivalent.
+ */
+function adaptBody(
+  js: CodeLine[],
+  rules: AdapterRule[],
+  bails: RegExp[],
+  todo: string,
+  post: (line: string) => string = (l) => l,
+): CodeLine[] {
+  // The JS emission's text always ends with a newline, so the previous
+  // string-based `split("\n")` yielded one extra empty final line. Derived
+  // targets' spacing depends on it, so reproduce it explicitly (untagged).
+  return [...js, { text: "" }]
+    .filter((l) => !l.text.startsWith("const sleep =") && !l.text.startsWith("main();"))
+    .map((l) => ({ ...l, text: post(adaptLine(l.text, rules, bails, todo)) }));
+}
+
 // String methods, template literals, and JS-runtime idioms have no mechanical
 // mapping in the C family — those lines bail to TODOs rather than emit code
 // that looks right but doesn't compile.
 const C_BAILS = [/\.(split|join|includes|toUpperCase|toLowerCase|trim|indexOf)\(/, /=>/, /\bfetch\(/, /JSON\./, /\[\.\.\./, /`/];
 
-function toCFamily(js: string, lang: "c" | "cpp"): string {
-  const body = js
-    .split("\n")
-    .filter((l) => !l.startsWith("const sleep =") && !l.startsWith("main();"))
-    .map((l) => adaptLine(l, SHARED_C_FAMILY, C_BAILS, `port to ${lang.toUpperCase()} by hand`))
-    .join("\n");
-  const header =
-    lang === "c"
-      ? "#include <stdio.h>\n#include <stdlib.h>\n#include <math.h>\n\n// helpers expected by the generated flow\n// void sleep_ms(double ms); void print_value(...);\n"
-      : "#include <iostream>\n#include <cmath>\n#include <string>\n\n// helpers expected by the generated flow\n// void sleep_ms(double ms); template<class T> void print_value(T v){ std::cout << v << \"\\n\"; }\n";
-  return `${header}\n${body}\nint main() { main_flow(); return 0; }\n`;
+const C_HEADER = [
+  "#include <stdio.h>",
+  "#include <stdlib.h>",
+  "#include <math.h>",
+  "",
+  "// helpers expected by the generated flow",
+  "// void sleep_ms(double ms); void print_value(...);",
+  "",
+];
+
+const CPP_HEADER = [
+  "#include <iostream>",
+  "#include <cmath>",
+  "#include <string>",
+  "",
+  "// helpers expected by the generated flow",
+  '// void sleep_ms(double ms); template<class T> void print_value(T v){ std::cout << v << "\\n"; }',
+  "",
+];
+
+function toCFamily(js: CodeLine[], lang: "c" | "cpp"): CodeLine[] {
+  const body = adaptBody(js, SHARED_C_FAMILY, C_BAILS, `port to ${lang.toUpperCase()} by hand`);
+  return [...tag(lang === "c" ? C_HEADER : CPP_HEADER), ...body, ...tag(["int main() { main_flow(); return 0; }"])];
 }
 
 const GO_RULES: AdapterRule[] = [
@@ -71,14 +112,15 @@ const GO_RULES: AdapterRule[] = [
   { from: /;$/g, to: "" },
 ];
 
-function toGo(js: string): string {
-  const body = js
-    .split("\n")
-    .filter((l) => !l.startsWith("const sleep =") && !l.startsWith("main();"))
-    .map((l) => adaptLine(l, GO_RULES, [/\.(split|join|includes|toUpperCase|toLowerCase|trim|indexOf)\(/, /=>/, /\bfetch\(/, /JSON\./, /`/], "port to Go by hand"))
-    .join("\n")
-    .replace(/\basync function main\(\) \{/g, "func mainFlow() {");
-  return `package main\n\nimport (\n\t"fmt"\n\t"math"\n\t"time"\n)\n\n${body}\n\nfunc main() { mainFlow() }\n`;
+const GO_BAILS = [/\.(split|join|includes|toUpperCase|toLowerCase|trim|indexOf)\(/, /=>/, /\bfetch\(/, /JSON\./, /`/];
+
+const GO_HEADER = ["package main", "", "import (", '\t"fmt"', '\t"math"', '\t"time"', ")", ""];
+
+function toGo(js: CodeLine[]): CodeLine[] {
+  const body = adaptBody(js, GO_RULES, GO_BAILS, "port to Go by hand", (l) =>
+    l.replace(/\basync function main\(\) \{/g, "func mainFlow() {"),
+  );
+  return [...tag(GO_HEADER), ...body, ...tag(["", "func main() { mainFlow() }"])];
 }
 
 const RUST_RULES: AdapterRule[] = [
@@ -94,14 +136,13 @@ const RUST_RULES: AdapterRule[] = [
   { from: /\bnull\b/g, to: "None::<f64>" },
 ];
 
-function toRust(js: string): string {
-  const body = js
-    .split("\n")
-    .filter((l) => !l.startsWith("const sleep =") && !l.startsWith("main();"))
-    .map((l) => adaptLine(l, RUST_RULES, [/\.(split|join|includes|toUpperCase|toLowerCase|trim|indexOf)\(/, /=>/, /\bfetch\(/, /JSON\./, /\bMath\./, /`/], "port to Rust by hand"))
-    .join("\n")
-    .replace(/\bfn main\(\) \{/g, "fn main_flow() {");
-  return `${body}\n\nfn main() { main_flow(); }\n`;
+const RUST_BAILS = [/\.(split|join|includes|toUpperCase|toLowerCase|trim|indexOf)\(/, /=>/, /\bfetch\(/, /JSON\./, /\bMath\./, /`/];
+
+function toRust(js: CodeLine[]): CodeLine[] {
+  const body = adaptBody(js, RUST_RULES, RUST_BAILS, "port to Rust by hand", (l) =>
+    l.replace(/\bfn main\(\) \{/g, "fn main_flow() {"),
+  );
+  return [...body, ...tag(["", "fn main() { main_flow(); }"])];
 }
 
 const PHP_RULES: AdapterRule[] = [
@@ -117,17 +158,16 @@ const PHP_RULES: AdapterRule[] = [
   { from: /!==/g, to: "!==" },
 ];
 
-function toPhp(js: string): string {
-  const body = js
-    .split("\n")
-    .filter((l) => !l.startsWith("const sleep =") && !l.startsWith("main();"))
-    .map((l) => adaptLine(l, PHP_RULES, [/\.(split|join|includes|toUpperCase|toLowerCase|trim|indexOf)\(/, /=>/, /\bfetch\(/, /JSON\./, /`/], "port to PHP by hand"))
-    .join("\n")
-    .replace(/\bfunction main\(\) \{/g, "function main_flow() {");
-  return `<?php\n\n${body}\n\nmain_flow();\n`;
+const PHP_BAILS = [/\.(split|join|includes|toUpperCase|toLowerCase|trim|indexOf)\(/, /=>/, /\bfetch\(/, /JSON\./, /`/];
+
+function toPhp(js: CodeLine[]): CodeLine[] {
+  const body = adaptBody(js, PHP_RULES, PHP_BAILS, "port to PHP by hand", (l) =>
+    l.replace(/\bfunction main\(\) \{/g, "function main_flow() {"),
+  );
+  return [...tag(["<?php", ""]), ...body, ...tag(["", "main_flow();"])];
 }
 
-export function adaptFromJs(js: string, target: string): string {
+export function adaptFromJs(js: CodeLine[], target: string): CodeLine[] {
   switch (target) {
     case "c":
       return toCFamily(js, "c");

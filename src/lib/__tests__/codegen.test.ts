@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { Node, Edge } from "@xyflow/react";
 import type { NodeData } from "@/types/nodes";
 import { NODE_DEFINITIONS } from "@/types/nodes";
-import { generateCode, CODE_TARGETS } from "../codegen";
+import { generateCode, CODE_TARGETS, linesForNode, nodeAtLine } from "../codegen";
 
 // Builds a canvas-shaped node from the real definitions so tests exercise the
 // same port ids/config defaults the app uses.
@@ -138,6 +138,60 @@ describe("generateCode", () => {
     expect(c.code).toContain("#include <stdio.h>");
     expect(c.code).toContain("int main()");
     expect(c.code).toContain("TODO(port to C by hand)"); // [...].reverse().join("")
+  });
+});
+
+describe("source mapping", () => {
+  // Manual Trigger -> Logger, with a constant feeding the logged value.
+  const nodes = [
+    makeNode("triggerInput", "t1"),
+    makeNode("loggerNode", "log1"),
+    makeNode("constNum", "n1", { value: 7 }),
+  ];
+  const edges = [edge("t1", "triggerOut", "log1", "inTrigger"), edge("n1", "value", "log1", "value")];
+
+  it("attributes the print line to the logger, not the trigger that fired it", () => {
+    for (const [language, call] of [["javascript", "console.log("], ["python", "print("]] as const) {
+      const res = generateCode(nodes, edges, language);
+      const printed = res.lines.filter((l) => l.text.includes(call));
+      expect(printed.length, language).toBeGreaterThan(0);
+      for (const line of printed) expect(line.nodeId, `${language}: ${line.text}`).toBe("log1");
+    }
+  });
+
+  it("round-trips linesForNode and nodeAtLine over a multi-node graph", () => {
+    const res = generateCode(nodes, edges, "javascript");
+    const loggerLines = linesForNode(res, "log1");
+    expect(loggerLines.length).toBeGreaterThan(0);
+    for (const i of loggerLines) expect(nodeAtLine(res, i)).toBe("log1");
+    // The logger's console.log is one of them; the trigger owns its own def line.
+    expect(loggerLines.some((i) => res.lines[i].text.includes("console.log("))).toBe(true);
+    const triggerLines = linesForNode(res, "t1");
+    expect(triggerLines.some((i) => res.lines[i].text.includes("function run_trigger_1()"))).toBe(true);
+    // Disjoint sets, and imports/helpers belong to no node.
+    expect(triggerLines.filter((i) => loggerLines.includes(i))).toEqual([]);
+    expect(nodeAtLine(res, 0)).toBeUndefined();
+    expect(nodeAtLine(res, res.lines.length + 10)).toBeUndefined();
+    expect(linesForNode(res, "nope")).toEqual([]);
+  });
+
+  it("keeps attribution through the C adapter's filtering and headers", () => {
+    const res = generateCode(nodes, edges, "c");
+    const printed = res.lines.filter((l) => l.text.includes("print_value("));
+    expect(printed.length).toBeGreaterThan(0);
+    // Terminal prints for unconsumed outputs belong to their own node, so
+    // assert the logger owns at least one and none is mis-tagged to t1.
+    expect(printed.some((l) => l.nodeId === "log1")).toBe(true);
+    expect(printed.some((l) => l.nodeId === "t1")).toBe(false);
+    // Header lines are shared scaffolding, not any node's code.
+    expect(nodeAtLine(res, 0)).toBeUndefined();
+  });
+
+  it("never lets the line map drift from the emitted text", () => {
+    for (const target of CODE_TARGETS) {
+      const res = generateCode(nodes, edges, target.id);
+      expect(res.lines.map((l) => l.text).join("\n") + "\n", target.id).toBe(res.code);
+    }
   });
 });
 

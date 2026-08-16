@@ -1,5 +1,6 @@
 import type { Node, Edge } from "@xyflow/react";
 import { NODE_DEFINITIONS, type NodeData } from "@/types/nodes";
+import { logEvent } from "./debug-log";
 
 // Validates and materializes an LLM-proposed graph. The model's output is
 // untrusted: every node type, port and edge endpoint is checked against
@@ -102,7 +103,19 @@ export function materializeNlGraph(spec: NlGraphSpec, idPrefix = `nl_${Date.now(
   }
 
   autoLayout(nodes, edges);
-  return { nodes, edges, problems, connectivity: auditConnectivity(nodes, edges) };
+  const connectivity = auditConnectivity(nodes, edges);
+
+  // Surface the build outcome in the terminal — a rejected node or an
+  // unwired graph used to be visible only in the transient AI activity log.
+  logEvent(
+    problems.length ? "warn" : "success",
+    "ai",
+    `AI graph materialized: ${nodes.length} node(s), ${edges.length} edge(s)` +
+      (problems.length ? ` — ${problems.length} problem(s)` : ""),
+    [...problems, ...connectivity].join("\n") || undefined
+  );
+
+  return { nodes, edges, problems, connectivity };
 }
 
 /**

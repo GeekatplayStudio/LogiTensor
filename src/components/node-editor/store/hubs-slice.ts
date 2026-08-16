@@ -2,6 +2,7 @@ import { StoreApi } from "zustand";
 import { Node } from "@xyflow/react";
 import { NodeData } from "@/types/nodes";
 import { toast } from "sonner";
+import { logEvent } from "@/lib/debug-log";
 import { Hub, NodeEditorState } from "./types";
 import { cloneLayerContents, syncHubs, uniqueId } from "./graph-helpers";
 
@@ -31,6 +32,7 @@ export const createHubsSlice = (set: Setter, get: Getter) => ({
     };
     set({ hubs: [...hubs, hub] });
     toast.success(`Created ${hub.name}`);
+    logEvent("info", "graph", `Hub created: ${hub.name}`, `id: ${hub.id}`);
   },
 
   duplicateHub: (id: string) => {
@@ -50,6 +52,7 @@ export const createHubsSlice = (set: Setter, get: Getter) => ({
     };
     set({ hubs: [...hubs, hub] });
     toast.success(`Duplicated "${src.name}" to "${hub.name}"`);
+    logEvent("info", "graph", `Hub duplicated: "${src.name}" → "${hub.name}"`, `${newLayers.length} dimension(s)`);
   },
 
   deleteHub: (id: string) => {
@@ -76,6 +79,7 @@ export const createHubsSlice = (set: Setter, get: Getter) => ({
       set({ hubs: remaining });
     }
     toast.success("Hub deleted.");
+    logEvent("info", "graph", `Hub deleted: ${hubs.find((h) => h.id === id)?.name ?? id}`);
   },
 
   selectHub: (id: string) => {
@@ -94,6 +98,7 @@ export const createHubsSlice = (set: Setter, get: Getter) => ({
       nodes: activeLayer?.nodes ?? [],
       edges: activeLayer?.edges ?? [],
     });
+    logEvent("info", "graph", `Switched to hub "${target.name}"`, `active dimension: ${activeLayer?.name ?? "-"}`);
   },
 
   renameHub: (id: string, name: string) => {

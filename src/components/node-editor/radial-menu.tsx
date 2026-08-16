@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { NODE_DEFINITIONS } from "@/types/nodes";
 import { useNodeEditorStore } from "./use-node-editor-store";
 import { useReactFlow } from "@xyflow/react";
+import { getNodeIcon } from "@/lib/node-icons";
 import {
   HelpCircle,
   X,
@@ -233,12 +234,14 @@ export default function RadialMenu({ x, y, onClose, isOpen }: RadialMenuProps) {
                     exit={{ x: 0, y: 0, opacity: 0, scale: 0.5 }}
                     transition={{ type: "spring", damping: 18, stiffness: 460, delay: idx * 0.008 }}
                     onClick={() => handleNodeClick(node.type)}
-                    className={`absolute px-2.5 py-1.5 rounded-lg border bg-zinc-950/95 border-zinc-800 hover:border-zinc-600 text-zinc-300 hover:text-zinc-50 font-medium text-[10px] whitespace-nowrap cursor-pointer z-10 shadow-lg hover:scale-105 active:scale-95 transition-all max-w-[120px] truncate`}
-                    title={node.description}
+                    className={`absolute px-2 py-1.5 rounded-lg border bg-zinc-950/95 border-zinc-800 hover:border-zinc-600 text-zinc-300 hover:text-zinc-50 font-medium text-[10px] whitespace-nowrap cursor-pointer z-10 shadow-lg hover:scale-105 active:scale-95 transition-all max-w-[140px]`}
+                    title={`${node.label} — ${node.description}`}
                   >
                     <div className="flex items-center gap-1.5">
-                      <div className={`w-1 h-1 rounded-full ${colors.text.replace("text-", "bg-")}`} />
-                      <span>{node.label}</span>
+                      {/* Per-node icon so a node is recognizable at a glance
+                          rather than only by reading its label. */}
+                      <span className={`shrink-0 ${colors.text}`}>{getNodeIcon(node.type, node.category)}</span>
+                      <span className="truncate">{node.label}</span>
                     </div>
                   </motion.div>
                 );

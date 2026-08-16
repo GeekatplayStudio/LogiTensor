@@ -4,6 +4,7 @@ import { Search, Plus, ChevronDown } from "lucide-react";
 import { useNodeEditorStore } from "./use-node-editor-store";
 import { Input } from "@/components/ui/input";
 import { getCategoryStyles } from "@/lib/node-styles";
+import { getNodeIcon } from "@/lib/node-icons";
 
 export default function Sidebar() {
   const addNode = useNodeEditorStore((state) => state.addNode);
@@ -108,7 +109,9 @@ export default function Sidebar() {
                     className={`group flex items-center justify-between p-2.5 rounded-lg border-l-2 border border-zinc-900 ${borderAccent} bg-zinc-900/30 hover:bg-zinc-900/80 transition-all duration-200 cursor-grab active:cursor-grabbing hover:translate-x-0.5`}
                   >
                     <div className="flex items-start gap-2 min-w-0 pr-2">
-                      <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${styles.accent}`} />
+                      {/* Same per-node icon the radial menu uses, so a node
+                          looks identical wherever it's picked from. */}
+                      <span className={`mt-0.5 shrink-0 ${textAccent}`}>{getNodeIcon(node.type, node.category, 13)}</span>
                       <div className="flex flex-col gap-0.5 min-w-0">
                         <span className="text-xs font-semibold text-zinc-200 group-hover:text-zinc-50 transition">
                           {node.label}

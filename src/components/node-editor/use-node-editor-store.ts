@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { logEvent } from "@/lib/debug-log";
 import { NodeEditorState } from "./store/types";
 import { createGraphSlice } from "./store/graph-slice";
 import { createLayersSlice } from "./store/layers-slice";
@@ -8,10 +9,14 @@ import { createPersistenceSlice } from "./store/persistence-slice";
 
 export type { Layer, Hub } from "./store/types";
 
-export const useNodeEditorStore = create<NodeEditorState>((set, get) => ({
-  ...createGraphSlice(set, get),
-  ...createLayersSlice(set, get),
-  ...createHubsSlice(set, get),
-  ...createExecutionSlice(set, get),
-  ...createPersistenceSlice(set, get),
-}));
+export const useNodeEditorStore = create<NodeEditorState>((set, get) => {
+  // First line in the terminal, so the session always has a visible origin.
+  logEvent("debug", "system", "Node editor store initialized");
+  return {
+    ...createGraphSlice(set, get),
+    ...createLayersSlice(set, get),
+    ...createHubsSlice(set, get),
+    ...createExecutionSlice(set, get),
+    ...createPersistenceSlice(set, get),
+  };
+});

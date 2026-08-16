@@ -86,6 +86,12 @@ export interface NodeEditorState {
   stepRequested: boolean;
   setIsPaused: (paused: boolean) => void;
   stepOnce: () => void;
+  // Debugger breakpoints, keyed by node id. A plain record (rather than a Set)
+  // so it survives JSON serialization and plays well with shallow comparison
+  // in selectors.
+  breakpoints: Record<string, true>;
+  toggleBreakpoint: (nodeId: string) => void;
+  clearBreakpoints: () => void;
   // Visual run-through testing: fires all Manual Triggers, then reports every
   // Expected Value node's verdict.
   runTests: () => Promise<void>;

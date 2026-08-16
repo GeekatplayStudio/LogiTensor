@@ -1,18 +1,18 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Sparkles, Loader2, Replace, ListPlus, Terminal } from "lucide-react";
+import { Sparkles, Loader2, Replace, ListPlus } from "lucide-react";
 import { toast } from "sonner";
 import { useNodeEditorStore } from "./use-node-editor-store";
 import { buildNodeSchema, materializeNlGraph } from "@/lib/nl-apply";
-import AiActivityLog, { type ActivityEntry } from "./ai-activity-log";
+import { logEvent, type LogLevel } from "@/lib/debug-log";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // Natural-language flow builder bar (sits above the workspace). Sends the
 // sentence + the node-type catalog to the local Ollama via the backend,
 // validates the proposal in nl-apply.ts, and applies it to the board — with
-// every step narrated in the activity overlay so a bad build is diagnosable.
+// every step narrated into the bottom terminal so a bad build is diagnosable.
 export default function NlInputBar() {
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
@@ -20,9 +20,6 @@ export default function NlInputBar() {
   const [mode, setMode] = useState<"replace" | "add">("replace");
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState("");
-  const [log, setLog] = useState<ActivityEntry[]>([]);
-  const [logOpen, setLogOpen] = useState(false);
-  const [logCollapsed, setLogCollapsed] = useState(false);
 
   // Discover installed Ollama models so the picker defaults to the most
   // capable one rather than a hardcoded name that may not be installed.
@@ -43,21 +40,20 @@ export default function NlInputBar() {
     };
   }, []);
 
-  const say = (kind: ActivityEntry["kind"], label: string, detail?: string) =>
-    setLog((prev) => [...prev, { kind, label, detail, at: Date.now() }]);
+  // Narrates the build into the bottom terminal, alongside every other
+  // subsystem's output.
+  const say = (level: LogLevel, label: string, detail?: string) =>
+    logEvent(level, "ai", label, detail);
 
   const build = async () => {
     const text = prompt.trim();
     if (!text || busy) return;
     setBusy(true);
-    setLog([]);
-    setLogOpen(true);
-    setLogCollapsed(false);
 
     try {
       const schema = buildNodeSchema();
       say("info", `Using model: ${model || "auto (most capable installed)"}`);
-      say("send", `Sending request with catalog of ${schema.length} node types`, text);
+      say("info", `Sending request with catalog of ${schema.length} node types`, text);
 
       const started = Date.now();
       const res = await fetch(`${API_URL}/nl-build`, {
@@ -72,11 +68,11 @@ export default function NlInputBar() {
         throw new Error(data.error || data.detail || `HTTP ${res.status}`);
       }
 
-      say("recv", `Model replied in ${((Date.now() - started) / 1000).toFixed(1)}s`, data.raw);
+      say("info", `Model replied in ${((Date.now() - started) / 1000).toFixed(1)}s`, data.raw);
 
       const { nodes, edges, problems, connectivity } = materializeNlGraph(data.graph);
       say(
-        problems.length ? "warn" : "ok",
+        problems.length ? "warn" : "success",
         `Validated: ${nodes.length} nodes, ${edges.length} connections accepted` +
           (problems.length ? `, ${problems.length} rejected` : ""),
         problems.length ? problems.join("\n") : undefined
@@ -87,7 +83,7 @@ export default function NlInputBar() {
       if (connectivity.length) {
         say("warn", `Wiring check found ${connectivity.length} issue(s)`, connectivity.join("\n"));
       } else {
-        say("ok", "Wiring check passed — every node is connected and reachable");
+        say("success", "Wiring check passed — every node is connected and reachable");
       }
 
       const store = useNodeEditorStore.getState();
@@ -102,7 +98,7 @@ export default function NlInputBar() {
         for (const n of useNodeEditorStore.getState().nodes) store.evaluateNode(n.id);
       }, 50);
 
-      say("ok", `Applied to canvas (${mode === "replace" ? "replaced board" : "added to board"})`);
+      say("success", `Applied to canvas (${mode === "replace" ? "replaced board" : "added to board"})`);
       toast.success(`Built ${nodes.length} nodes, ${edges.length} connections`);
       setPrompt("");
     } catch (err: unknown) {
@@ -115,8 +111,7 @@ export default function NlInputBar() {
   };
 
   return (
-    <>
-      <div className="h-11 shrink-0 border-b border-zinc-900 bg-zinc-950 flex items-center gap-2 px-3">
+    <div className="h-9 shrink-0 border-b border-zinc-900 bg-zinc-950 flex items-center gap-1.5 px-3">
         <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
         <input
           type="text"
@@ -125,7 +120,7 @@ export default function NlInputBar() {
           onKeyDown={(e) => e.key === "Enter" && build()}
           disabled={busy}
           placeholder='Describe a flow, e.g. "compare a random number to 50 and log whether it is higher"'
-          className="flex-1 h-7 text-xs bg-zinc-900/60 border border-zinc-800 rounded px-2.5 text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-amber-700/60"
+          className="flex-1 h-6 text-[11px] bg-zinc-900/60 border border-zinc-800 rounded px-2 text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-amber-700/60"
         />
 
         {models.length > 0 && (
@@ -133,7 +128,7 @@ export default function NlInputBar() {
             value={model}
             onChange={(e) => setModel(e.target.value)}
             disabled={busy}
-            className="h-7 max-w-[150px] text-[10px] bg-zinc-900/60 border border-zinc-800 rounded px-1.5 text-zinc-300 focus:outline-none focus:border-amber-700/60 cursor-pointer"
+            className="h-6 max-w-[130px] text-[10px] bg-zinc-900/60 border border-zinc-800 rounded px-1 text-zinc-300 focus:outline-none focus:border-amber-700/60 cursor-pointer"
             title="Which local Ollama model builds the graph. Larger coder/reasoning models follow the wiring rules far more reliably."
           >
             {models.map((m) => (
@@ -145,13 +140,6 @@ export default function NlInputBar() {
         )}
 
         <button
-          onClick={() => setLogOpen((v) => !v)}
-          className={`p-1.5 rounded transition cursor-pointer ${logOpen ? "text-amber-400 bg-zinc-800" : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"}`}
-          title="Show what the AI is doing (requests, replies, validation)"
-        >
-          <Terminal className="w-3.5 h-3.5" />
-        </button>
-        <button
           onClick={() => setMode(mode === "replace" ? "add" : "replace")}
           className="p-1.5 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition cursor-pointer"
           title={mode === "replace" ? "Mode: replace board (click to switch to add)" : "Mode: add to board (click to switch to replace)"}
@@ -161,21 +149,12 @@ export default function NlInputBar() {
         <button
           onClick={build}
           disabled={busy || !prompt.trim()}
-          className="h-7 px-3 rounded bg-gradient-to-r from-amber-500 to-orange-500 text-zinc-950 text-[11px] font-black uppercase tracking-wider disabled:opacity-40 hover:from-amber-400 hover:to-orange-400 transition cursor-pointer flex items-center gap-1.5"
+          className="h-6 px-2.5 rounded bg-gradient-to-r from-amber-500 to-orange-500 text-zinc-950 text-[10px] font-black uppercase tracking-wider disabled:opacity-40 hover:from-amber-400 hover:to-orange-400 transition cursor-pointer flex items-center gap-1"
           title="Build the described flow with the local LLM (Ollama)"
         >
           {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
           Build
         </button>
-      </div>
-
-      <AiActivityLog
-        entries={log}
-        open={logOpen && log.length > 0}
-        collapsed={logCollapsed}
-        onToggleCollapsed={() => setLogCollapsed((v) => !v)}
-        onClose={() => setLogOpen(false)}
-      />
-    </>
+    </div>
   );
 }

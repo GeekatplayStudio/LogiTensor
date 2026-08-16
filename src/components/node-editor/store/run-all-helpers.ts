@@ -3,6 +3,7 @@ import { Edge, Node } from "@xyflow/react";
 import { NodeData } from "@/types/nodes";
 import { edgeValueLabel, idleEdgeStyle, litEdgeStyle } from "@/lib/edge-styles";
 import { getPortColor } from "@/lib/node-styles";
+import { logEvent } from "@/lib/debug-log";
 import { NodeEditorState } from "./types";
 
 type Setter = StoreApi<NodeEditorState>["setState"];
@@ -20,6 +21,25 @@ export async function pauseGate(get: Getter, set: Setter): Promise<void> {
   }
 }
 
+/** Human-readable node name for log lines; falls back to the raw id. */
+export function nodeLabelOf(get: Getter, nodeId: string): string {
+  return get().nodes.find((n) => n.id === nodeId)?.data.label ?? nodeId;
+}
+
+/**
+ * Breakpoint check run immediately BEFORE a node executes. Hitting one flips
+ * the store into paused mode and then blocks on the existing pauseGate, so
+ * Resume/Step drive it exactly like a manual pause.
+ */
+export async function breakpointGate(get: Getter, set: Setter, nodeId: string): Promise<void> {
+  if (!get().breakpoints[nodeId]) return;
+  if (!get().isPaused) {
+    set({ isPaused: true, stepRequested: false });
+    logEvent("warn", "exec", `Breakpoint hit: ${nodeLabelOf(get, nodeId)}`, `node id: ${nodeId}`);
+  }
+  await pauseGate(get, set);
+}
+
 /**
  * Replays the backend's execution trace one node at a time, so the canvas
  * shows which node is running *now* and the Delay slider paces it in real
@@ -35,6 +55,11 @@ export async function replayTrace(
 ): Promise<void> {
   for (const nodeId of trace) {
     if (!get().nodes.some((n) => n.id === nodeId)) continue;
+
+    // Stop before this node runs if the user armed a breakpoint on it.
+    await breakpointGate(get, set, nodeId);
+
+    logEvent("debug", "exec", `Trace step: ${nodeLabelOf(get, nodeId)}`);
 
     // Highlight just this node as running.
     set((state) => ({
