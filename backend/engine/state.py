@@ -29,6 +29,16 @@ ACTIVE_TYPES = {
     "whileLoopNode",
     "randomNode",
     "leakyIntegrateFire",
+    # Extended library: trigger-driven nodes. As with counterNode/rangeNode,
+    # their stored state is owned by the frontend — the backend only reflects
+    # whatever `config` currently holds (see run_node_task).
+    "toggleNode",
+    "latchNode",
+    "listAppendNode",
+    "valueListNode",
+    "gateNode",
+    "onceNode",
+    "sequenceNode",
 }
 
 LOOP_TYPES = {"forLoopNode", "whileLoopNode"}

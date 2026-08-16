@@ -190,3 +190,235 @@ describe("resolveConditionFlag", () => {
     expect(resolveConditionFlag("1 == 2")).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Extended node library. Every case below is mirrored in
+// backend/tests/test_passive_parity.py so the two engines cannot drift.
+// ---------------------------------------------------------------------------
+
+describe("New Input nodes", () => {
+  it("clamps the slider value into its configured bounds", () => {
+    expect(computeNodeOutputs("sliderInput", {}, { value: 150, min: 0, max: 100 }).value).toBe(100);
+    expect(computeNodeOutputs("sliderInput", {}, { value: -5, min: 0, max: 100 }).value).toBe(0);
+  });
+
+  it("passes multiline text straight through", () => {
+    expect(computeNodeOutputs("textAreaInput", {}, { value: "a\nb" }).value).toBe("a\nb");
+  });
+
+  it("emits the current time as epoch ms plus a formatted string", () => {
+    const out = computeNodeOutputs("currentTimeNode", {}, {});
+    expect(typeof out.epoch).toBe("number");
+    expect(typeof out.formatted).toBe("string");
+  });
+});
+
+describe("New Logic nodes", () => {
+  it("XNOR is true only when both inputs agree", () => {
+    expect(computeNodeOutputs("xnorGate", { a: true, b: true }).out).toBe(true);
+    expect(computeNodeOutputs("xnorGate", { a: true, b: false }).out).toBe(false);
+  });
+
+  it("Toggle and SR Latch republish their stored state", () => {
+    expect(computeNodeOutputs("toggleNode", {}, { state: true }).state).toBe(true);
+    expect(computeNodeOutputs("latchNode", {}, { state: false }).state).toBe(false);
+  });
+});
+
+describe("New Math & Compare nodes", () => {
+  it("clamps a value into Min..Max", () => {
+    expect(computeNodeOutputs("clampNode", { value: 15, min: 0, max: 10 }).out).toBe(10);
+    expect(computeNodeOutputs("clampNode", { value: -3, min: 0, max: 10 }).out).toBe(0);
+  });
+
+  it("maps a value from one range onto another", () => {
+    const out = computeNodeOutputs("mapRangeNode", {
+      value: 512, inMin: 0, inMax: 1024, outMin: 0, outMax: 100,
+    });
+    expect(out.out).toBe(50);
+  });
+
+  it("collapses a zero-width source range to Out Min instead of dividing by zero", () => {
+    const out = computeNodeOutputs("mapRangeNode", {
+      value: 3, inMin: 5, inMax: 5, outMin: 7, outMax: 9,
+    });
+    expect(out.out).toBe(7);
+  });
+
+  it("interpolates between A and B by T", () => {
+    expect(computeNodeOutputs("lerpNode", { a: 0, b: 10, t: 0.25 }).out).toBe(2.5);
+  });
+
+  it("tests membership of a range, honouring the inclusive flag", () => {
+    expect(computeNodeOutputs("betweenNode", { value: 5, min: 0, max: 10 }).out).toBe(true);
+    expect(computeNodeOutputs("betweenNode", { value: 10, min: 0, max: 10 }, { inclusive: false }).out).toBe(false);
+  });
+
+  it("rounds to N decimals, half-up like Math.round", () => {
+    expect(computeNodeOutputs("roundToNode", { value: 3.14159 }, { decimals: 2 }).out).toBe(3.14);
+    expect(computeNodeOutputs("roundToNode", { value: 2.5 }, { decimals: 0 }).out).toBe(3);
+  });
+
+  it("bypasses to the primary input when Enabled is false", () => {
+    expect(computeNodeOutputs("clampNode", { value: 99, min: 0, max: 1, enabled: false }).out).toBe(99);
+  });
+});
+
+describe("New Data & Text nodes", () => {
+  it("splits text into a list and counts the parts", () => {
+    const out = computeNodeOutputs("splitTextNode", { text: "a,b,c", delimiter: "," });
+    expect(out.list).toEqual(["a", "b", "c"]);
+    expect(out.count).toBe(3);
+  });
+
+  it("joins a list with a delimiter", () => {
+    expect(computeNodeOutputs("joinTextNode", { list: [1, 2, 3], delimiter: "-" }).out).toBe("1-2-3");
+  });
+
+  it("extracts a substring, counting negative starts from the end", () => {
+    expect(computeNodeOutputs("substringNode", { text: "LogiBoard", start: 4, length: 5 }).out).toBe("Board");
+    expect(computeNodeOutputs("substringNode", { text: "LogiBoard", start: -5, length: 5 }).out).toBe("Board");
+  });
+
+  it("fills template placeholders from lettered inputs in either case", () => {
+    const out = computeNodeOutputs("templateNode", { a: "cat", b: 3 }, { template: "{a} has {B}" });
+    expect(out.out).toBe("cat has 3");
+  });
+
+  it("parses JSON and reports validity", () => {
+    const ok = computeNodeOutputs("jsonParseNode", { text: '{"x":1}' });
+    expect(ok.out).toEqual({ x: 1 });
+    expect(ok.valid).toBe(true);
+    expect(computeNodeOutputs("jsonParseNode", { text: "nope" }).valid).toBe(false);
+  });
+
+  it("stringifies values compactly", () => {
+    expect(computeNodeOutputs("jsonStringifyNode", { value: { a: 1 } }).out).toBe('{"a":1}');
+  });
+
+  it("converts between number, string and boolean", () => {
+    expect(computeNodeOutputs("toNumberNode", { value: "42" }).out).toBe(42);
+    expect(computeNodeOutputs("toNumberNode", { value: "abc" }).out).toBe(0);
+    expect(computeNodeOutputs("toStringNode", { value: [1, 2] }).out).toBe("[1,2]");
+    expect(computeNodeOutputs("toBooleanNode", { value: "false" }).out).toBe(false);
+    expect(computeNodeOutputs("toBooleanNode", { value: "yes" }).out).toBe(true);
+  });
+
+  it("matches a regex and returns the first match", () => {
+    const out = computeNodeOutputs("regexMatchNode", { text: "abc123", pattern: "\\d+" });
+    expect(out.matched).toBe(true);
+    expect(out.match).toBe("123");
+  });
+
+  it("treats an invalid regex as no match rather than throwing", () => {
+    const out = computeNodeOutputs("regexMatchNode", { text: "abc", pattern: "(" });
+    expect(out.matched).toBe(false);
+    expect(out.match).toBe("");
+  });
+});
+
+describe("Lists category", () => {
+  it("reports list length", () => {
+    expect(computeNodeOutputs("listLengthNode", { list: [1, 2, 3] }).length).toBe(3);
+  });
+
+  it("gets an entry by index, supporting negative indexes", () => {
+    expect(computeNodeOutputs("listGetNode", { list: [1, 2, 3], index: -1 }).item).toBe(3);
+    expect(computeNodeOutputs("listGetNode", { list: [1, 2, 3], index: 5 }).found).toBe(false);
+  });
+
+  it("aggregates a list of numbers", () => {
+    const list = [1, 2, 3];
+    expect(computeNodeOutputs("listStatsNode", { list }, { op: "sum" }).out).toBe(6);
+    expect(computeNodeOutputs("listStatsNode", { list }, { op: "avg" }).out).toBe(2);
+    expect(computeNodeOutputs("listStatsNode", { list }, { op: "min" }).out).toBe(1);
+    expect(computeNodeOutputs("listStatsNode", { list }, { op: "max" }).out).toBe(3);
+    expect(computeNodeOutputs("listStatsNode", { list }, { op: "count" }).out).toBe(3);
+  });
+
+  it("sorts numerically or lexically, in either direction", () => {
+    expect(computeNodeOutputs("listSortNode", { list: [3, 1, 2] }, { numeric: true }).out).toEqual([1, 2, 3]);
+    expect(
+      computeNodeOutputs("listSortNode", { list: [3, 1, 2] }, { numeric: true, direction: "desc" }).out
+    ).toEqual([3, 2, 1]);
+    expect(computeNodeOutputs("listSortNode", { list: ["b", "a"] }, { numeric: false }).out).toEqual(["a", "b"]);
+  });
+
+  it("slices a sub-list", () => {
+    expect(computeNodeOutputs("listSliceNode", { list: [1, 2, 3, 4], start: 1, end: 3 }).out).toEqual([2, 3]);
+  });
+
+  it("finds a value in a list, comparing loosely as text", () => {
+    const out = computeNodeOutputs("listContainsNode", { list: [1, 2, 3], value: "2" });
+    expect(out.out).toBe(true);
+    expect(out.index).toBe(1);
+  });
+
+  it("republishes the accumulated append buffer", () => {
+    const out = computeNodeOutputs("listAppendNode", {}, { items: [1, 2] });
+    expect(out.list).toEqual([1, 2]);
+    expect(out.length).toBe(2);
+  });
+});
+
+describe("New Output nodes", () => {
+  it("republishes the accumulated value list", () => {
+    const out = computeNodeOutputs("valueListNode", {}, { values: ["a", "b"] });
+    expect(out.list).toEqual(["a", "b"]);
+    expect(out.length).toBe(2);
+  });
+
+  it("renders a gauge reading as a clamped percentage", () => {
+    expect(computeNodeOutputs("gaugeNode", { value: 25 }, { min: 0, max: 50 }).percent).toBe(50);
+    expect(computeNodeOutputs("gaugeNode", { value: 999 }, { min: 0, max: 50 }).percent).toBe(100);
+  });
+});
+
+describe("Extended trigger-driven nodes", () => {
+  it("Toggle flips its state and Reset clears it", async () => {
+    const flip = await handleTriggerOperation("toggleNode", {}, { state: false }, "inTrigger");
+    expect(flip.updatedConfig?.state).toBe(true);
+    const reset = await handleTriggerOperation("toggleNode", {}, { state: true }, "resetTrigger");
+    expect(reset.updatedConfig?.state).toBe(false);
+  });
+
+  it("SR Latch holds true on Set and false on Reset", async () => {
+    expect((await handleTriggerOperation("latchNode", {}, {}, "setTrigger")).updatedConfig?.state).toBe(true);
+    expect((await handleTriggerOperation("latchNode", {}, {}, "resetTrigger")).updatedConfig?.state).toBe(false);
+  });
+
+  it("List Append pushes the current value and Reset empties the buffer", async () => {
+    const appended = await handleTriggerOperation("listAppendNode", { value: 7 }, { items: [1] }, "inTrigger");
+    expect(appended.updatedConfig?.items).toEqual([1, 7]);
+    const cleared = await handleTriggerOperation("listAppendNode", { value: 7 }, { items: [1] }, "resetTrigger");
+    expect(cleared.updatedConfig?.items).toEqual([]);
+  });
+
+  it("Gate passes the trigger only while Open is true", async () => {
+    expect((await handleTriggerOperation("gateNode", { open: true }, {}, "inTrigger")).nextTriggerPort).toBe("outTrigger");
+    expect((await handleTriggerOperation("gateNode", { open: false }, {}, "inTrigger")).nextTriggerPort).toBe(null);
+  });
+
+  it("Once fires a single time until Reset re-arms it", async () => {
+    const first = await handleTriggerOperation("onceNode", {}, { fired: false }, "inTrigger");
+    expect(first.nextTriggerPort).toBe("outTrigger");
+    expect(first.updatedConfig?.fired).toBe(true);
+    expect((await handleTriggerOperation("onceNode", {}, { fired: true }, "inTrigger")).nextTriggerPort).toBe(null);
+    expect((await handleTriggerOperation("onceNode", {}, { fired: true }, "resetTrigger")).updatedConfig?.fired).toBe(false);
+  });
+
+  it("Sequence cycles through its three outputs", async () => {
+    for (const [step, port] of [[0, "out1"], [1, "out2"], [2, "out3"]] as const) {
+      const res = await handleTriggerOperation("sequenceNode", {}, { step }, "inTrigger");
+      expect(res.nextTriggerPort).toBe(port);
+    }
+    // The third fire wraps the counter back round to the first output.
+    expect((await handleTriggerOperation("sequenceNode", {}, { step: 2 }, "inTrigger")).updatedConfig?.step).toBe(0);
+  });
+
+  it("Value List appends each triggered value as a new entry", async () => {
+    const res = await handleTriggerOperation("valueListNode", { value: "b" }, { values: ["a"] }, "inTrigger");
+    expect(res.updatedConfig?.values).toEqual(["a", "b"]);
+    expect(res.nextTriggerPort).toBe("outTrigger");
+  });
+});

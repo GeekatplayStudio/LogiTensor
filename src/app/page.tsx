@@ -54,7 +54,8 @@ export default function Home() {
   }, [isLayersViewOpen, is3DOpen, layers, activeLayerId, selectLayer, setIsLayersViewOpen]);
 
   return (
-    <div className="flex flex-col h-dvh w-full overflow-hidden bg-zinc-950 text-zinc-100 select-none">
+    // `relative` anchors the AI activity overlay to the app shell's bottom.
+    <div className="relative flex flex-col h-dvh w-full overflow-hidden bg-zinc-950 text-zinc-100 select-none">
       {/* Top Navbar */}
       <header className="h-14 border-b border-zinc-900 bg-zinc-950 flex items-center justify-between px-4 z-20 shrink-0">
         <div className="flex items-center gap-3">

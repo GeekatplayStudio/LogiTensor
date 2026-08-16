@@ -3,6 +3,10 @@ from typing import Dict, Any
 from backend.safe_evaluator import safe_evaluate
 from backend.engine.state import GraphState
 from backend.engine.helpers import _coerce_operand, BYPASS_PORTS
+# The extended node library registers its computations here rather than as
+# more elif branches, keeping this module under the 500-line guardrail.
+from backend.engine.extra import EXTRA_COMPUTE
+from backend.engine.lists import LIST_COMPUTE
 from backend.engine.nn_math import (
     _generate_weights,
     _conv1d_forward,
@@ -94,6 +98,10 @@ def execute_logic_computation(node_type: str, inputs: Dict[str, Any], config: Di
     if bypass and inputs.get("enabled") is False:
         primary_in, primary_out = bypass
         return {primary_out: inputs.get(primary_in)}
+
+    registered = EXTRA_COMPUTE.get(node_type) or LIST_COMPUTE.get(node_type)
+    if registered:
+        return registered(inputs, config)
 
     outputs = {}
     if node_type == "constNum":

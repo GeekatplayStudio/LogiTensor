@@ -146,6 +146,16 @@ async def run_node_task(node_id: str, state: GraphState) -> GraphState:
                 f"{'SPIKED' if fired else '(no spike)'}"
             )
 
+        # 5.7. Extended-library trigger nodes (Toggle, SR Latch, List Append,
+        # Value List, Gate, Once, Sequence). Following the counterNode
+        # convention, the frontend owns their stored state — the backend does
+        # not re-derive it (it can't tell which of several trigger ports
+        # fired), it only reflects the current config through the pure path.
+        elif node_type in ("toggleNode", "latchNode", "listAppendNode", "valueListNode",
+                           "gateNode", "onceNode", "sequenceNode"):
+            outputs = execute_logic_computation(node_type, inputs, config)
+            state["logs"].append(f"{node_type} '{node_id}' reflecting stored state: {outputs}")
+
         # 6. Console Log collector
         elif node_type == "loggerNode":
             val_to_log = inputs.get("value")

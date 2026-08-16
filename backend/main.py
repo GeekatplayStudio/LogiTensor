@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Any, Dict
 from backend.execution_engine import compile_and_run_graph
-from backend.nl_builder import build_graph_from_prompt
+from backend.nl_builder import build_graph_from_prompt, list_models, default_model
 
 app = FastAPI(title="LogiTensor LangGraph Backend")
 
@@ -53,7 +53,8 @@ class NlBuildRequest(BaseModel):
     # is NODE_DEFINITIONS in TypeScript — the backend never duplicates it).
     # Aliased because "schema" shadows a BaseModel attribute in pydantic.
     schema_: List[Dict[str, Any]] = Field(default=[], alias="schema")
-    model: str = "llama3"
+    # Empty means "pick the most capable installed model" (see default_model).
+    model: str = ""
     # "prompt" = a natural-language request; "code" = hand-edited source the
     # user wants turned back into a graph.
     mode: str = "prompt"
@@ -65,6 +66,12 @@ async def nl_build(payload: NlBuildRequest):
         return await build_graph_from_prompt(payload.prompt, payload.schema_, payload.model, payload.mode)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/models")
+def get_models():
+    """Installed Ollama models for the builder's model picker."""
+    return {"models": list_models(), "default": default_model()}
 
 
 @app.get("/")

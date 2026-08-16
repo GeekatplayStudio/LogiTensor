@@ -3,7 +3,20 @@ import { motion, AnimatePresence } from "framer-motion";
 import { NODE_DEFINITIONS } from "@/types/nodes";
 import { useNodeEditorStore } from "./use-node-editor-store";
 import { useReactFlow } from "@xyflow/react";
-import { HelpCircle, Layers, Cpu, CornerDownRight, X, BarChart, Settings, Brain, Filter, Zap, LayoutGrid } from "lucide-react";
+import {
+  HelpCircle,
+  X,
+  LogIn,
+  CircuitBoard,
+  GitBranch,
+  Calculator,
+  Type,
+  List,
+  Monitor,
+  Brain,
+  Waypoints,
+  Boxes,
+} from "lucide-react";
 
 interface RadialMenuProps {
   x: number;
@@ -23,16 +36,20 @@ export default function RadialMenu({ x, y, onClose, isOpen }: RadialMenuProps) {
   // drift-prone hardcoded list.
   const categories = [...new Set(Object.values(NODE_DEFINITIONS).map((d) => d.category))];
 
+  // Icons chosen to read as what the category actually does: data entering
+  // (LogIn) vs. leaving/being displayed (Monitor), branching execution
+  // (GitBranch), arithmetic (Calculator), text (Type), collections (List).
   const categoryIcons: Record<string, React.ReactNode> = {
-    Inputs: <Layers size={14} />,
-    Logic: <Cpu size={14} />,
-    "Control Flow": <CornerDownRight size={14} />,
-    "Math & Compare": <BarChart size={14} />,
-    "Data & Text": <Filter size={14} />,
-    Outputs: <Settings size={14} />,
+    Inputs: <LogIn size={14} />,
+    Logic: <CircuitBoard size={14} />,
+    "Control Flow": <GitBranch size={14} />,
+    "Math & Compare": <Calculator size={14} />,
+    "Data & Text": <Type size={14} />,
+    Lists: <List size={14} />,
+    Outputs: <Monitor size={14} />,
     "AI & Scripts": <Brain size={14} />,
-    "Neural Network": <Zap size={14} />,
-    "AI Model": <LayoutGrid size={14} />,
+    "Neural Network": <Waypoints size={14} />,
+    "AI Model": <Boxes size={14} />,
   };
 
   const categoryColors: Record<string, { bg: string; text: string; border: string; glow: string }> = {
@@ -176,7 +193,10 @@ export default function RadialMenu({ x, y, onClose, isOpen }: RadialMenuProps) {
                 initial={{ x: 0, y: 0, opacity: 0 }}
                 animate={{ x: itemX, y: itemY, opacity: 1 }}
                 exit={{ x: 0, y: 0, opacity: 0 }}
-                transition={{ type: "spring", damping: 18, delay: idx * 0.03 }}
+                transition={{ type: "spring", damping: 20, stiffness: 420, delay: idx * 0.012 }}
+                // Hovering opens the submenu — no click needed. Click still
+                // toggles, so it works on touch/pen where hover doesn't exist.
+                onMouseEnter={() => setSelectedCategory(cat)}
                 onClick={() => setSelectedCategory(isSelected ? null : cat)}
                 className={`absolute w-11 h-11 rounded-full border ${colors.bg} ${colors.text} ${colors.border} flex items-center justify-center cursor-pointer text-xs font-semibold z-20 ${colors.glow} hover:scale-110 active:scale-95 transition-transform ${
                   isSelected ? "ring-2 ring-zinc-300 scale-105" : ""
@@ -211,7 +231,7 @@ export default function RadialMenu({ x, y, onClose, isOpen }: RadialMenuProps) {
                     initial={{ x: 0, y: 0, opacity: 0, scale: 0.5 }}
                     animate={{ x: subX, y: subY, opacity: 1, scale: 1 }}
                     exit={{ x: 0, y: 0, opacity: 0, scale: 0.5 }}
-                    transition={{ type: "spring", damping: 16, delay: idx * 0.02 }}
+                    transition={{ type: "spring", damping: 18, stiffness: 460, delay: idx * 0.008 }}
                     onClick={() => handleNodeClick(node.type)}
                     className={`absolute px-2.5 py-1.5 rounded-lg border bg-zinc-950/95 border-zinc-800 hover:border-zinc-600 text-zinc-300 hover:text-zinc-50 font-medium text-[10px] whitespace-nowrap cursor-pointer z-10 shadow-lg hover:scale-105 active:scale-95 transition-all max-w-[120px] truncate`}
                     title={node.description}

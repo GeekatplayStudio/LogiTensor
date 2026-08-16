@@ -59,7 +59,7 @@ export function assembleNative(nodes: GraphNode[], edges: Edge[], profile: Langu
   // 3. Compose. Setup is collected as a side effect of the emissions above.
   const lines: string[] = [];
   if (profile.id === "python") {
-    lines.push("import math, random, time, json, urllib.request", "");
+    lines.push("import math, random, re, time, json, urllib.request", "");
   } else {
     lines.push("const sleep = (ms) => new Promise((r) => setTimeout(r, ms));", "");
   }
@@ -75,7 +75,9 @@ export function assembleNative(nodes: GraphNode[], edges: Edge[], profile: Langu
     ...(unreached.length ? [profile.comment("not reached by any trigger — wire a Manual Trigger to run these"), ...unreached] : []),
     ...terminals,
   ];
-  if (main.length === 0) main.push(profile.comment("empty graph"));
+  // emptyBody as well as the note: a Python block made only of comments is an
+  // IndentationError, so `main` always needs one real statement.
+  if (main.length === 0) main.push(profile.comment("empty graph"), profile.emptyBody);
   if (profile.id === "python") {
     lines.push('if __name__ == "__main__":');
     lines.push(...indent(main, unit));

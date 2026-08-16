@@ -15,6 +15,7 @@ export const MUTED_COLORS = {
   fuchsia: "#AD8BB0", // federation accent
   red: "#B57676", // error state
   indigo: "#8686AD", // Neural Network
+  olive: "#93A96F", // Lists
 } as const;
 
 /**
@@ -62,6 +63,11 @@ export const getCategoryStyles = (category: string, selected: boolean) => {
       headerBg: "bg-[#6FA98A]/35 text-zinc-50 border-[#6FA98A]/40",
       border: selected ? "border-[#6FA98A] shadow-[0_0_12px_rgba(111,169,138,0.3)]" : "border-zinc-700",
       accent: "bg-[#6FA98A]",
+    },
+    Lists: {
+      headerBg: "bg-[#93A96F]/35 text-zinc-50 border-[#93A96F]/40",
+      border: selected ? "border-[#93A96F] shadow-[0_0_12px_rgba(147,169,111,0.3)]" : "border-zinc-700",
+      accent: "bg-[#93A96F]",
     },
     Outputs: {
       headerBg: "bg-[#AD8288]/35 text-zinc-50 border-[#AD8288]/40",

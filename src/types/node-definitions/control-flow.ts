@@ -102,4 +102,43 @@ export const CONTROL_FLOW_NODES: Record<string, NodeDefinition> = {
     ],
     config: { min: 0, max: 10, initialCount: 0, count: 0 },
   },
+  gateNode: {
+    type: "gateNode",
+    label: "Gate",
+    category: "Control Flow",
+    description: "Passes the trigger through only while its Open input is true — otherwise the chain stops here.",
+    inputs: [
+      { id: "inTrigger", name: "In", type: "trigger" },
+      { id: "open", name: "Open", type: "data", dataType: "boolean", value: true },
+    ],
+    outputs: [{ id: "outTrigger", name: "Out", type: "trigger" }],
+  },
+  onceNode: {
+    type: "onceNode",
+    label: "Once",
+    category: "Control Flow",
+    description: "Passes the trigger through the first time only. Reset re-arms it.",
+    inputs: [
+      { id: "inTrigger", name: "In", type: "trigger" },
+      { id: "resetTrigger", name: "Reset", type: "trigger" },
+    ],
+    outputs: [{ id: "outTrigger", name: "Out", type: "trigger" }],
+    config: { fired: false },
+  },
+  sequenceNode: {
+    type: "sequenceNode",
+    label: "Sequence",
+    category: "Control Flow",
+    description: "Fires Out 1, Out 2 then Out 3 in turn — one output per incoming trigger, cycling round.",
+    inputs: [
+      { id: "inTrigger", name: "In", type: "trigger" },
+      { id: "resetTrigger", name: "Reset", type: "trigger" },
+    ],
+    outputs: [
+      { id: "out1", name: "Out 1", type: "trigger" },
+      { id: "out2", name: "Out 2", type: "trigger" },
+      { id: "out3", name: "Out 3", type: "trigger" },
+    ],
+    config: { step: 0 },
+  },
 };

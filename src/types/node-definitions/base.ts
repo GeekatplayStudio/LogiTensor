@@ -25,7 +25,7 @@ export interface NodeData extends Record<string, any> {
 export interface NodeDefinition {
   type: string;
   label: string;
-  category: "Inputs" | "Logic" | "Control Flow" | "Math & Compare" | "Data & Text" | "Outputs" | "AI & Scripts" | "Neural Network" | "AI Model";
+  category: "Inputs" | "Logic" | "Control Flow" | "Math & Compare" | "Data & Text" | "Lists" | "Outputs" | "AI & Scripts" | "Neural Network" | "AI Model";
   description: string;
   inputs: PortDefinition[];
   outputs: PortDefinition[];

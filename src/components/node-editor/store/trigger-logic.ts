@@ -120,7 +120,10 @@ export async function runTriggerLogic(
         }));
       }
 
-      if (currentTargetNode.type === "counterNode" || currentTargetNode.type === "leakyIntegrateFire") {
+      // Any node that mutated its own stored state (counter, toggle, latch,
+      // list append, …) must re-publish its data outputs so downstream data
+      // consumers see the new value immediately.
+      if (triggerRes.updatedConfig) {
         get().evaluateNode(targetNodeId);
       }
     }

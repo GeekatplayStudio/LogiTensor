@@ -13,6 +13,7 @@ import { LOGIC_NODES } from "./node-definitions/logic";
 import { CONTROL_FLOW_NODES } from "./node-definitions/control-flow";
 import { MATH_COMPARE_NODES } from "./node-definitions/math-compare";
 import { DATA_TEXT_NODES } from "./node-definitions/data-text";
+import { LIST_NODES } from "./node-definitions/lists";
 import { OUTPUT_NODES } from "./node-definitions/outputs";
 import { AI_SCRIPT_NODES } from "./node-definitions/ai-scripts";
 import { NEURAL_NETWORK_NODES } from "./node-definitions/neural-network";
@@ -24,6 +25,7 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
   ...CONTROL_FLOW_NODES,
   ...MATH_COMPARE_NODES,
   ...DATA_TEXT_NODES,
+  ...LIST_NODES,
   ...OUTPUT_NODES,
   ...AI_SCRIPT_NODES,
   ...NEURAL_NETWORK_NODES,

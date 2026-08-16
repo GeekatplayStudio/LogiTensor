@@ -1,6 +1,7 @@
 import type { GraphNode, LanguageProfile } from "./types";
 import { GraphView, NameAllocator } from "./graph";
 import { literal } from "./profiles";
+import { extraOutputExpr } from "./expressions-extra";
 
 // Emits the expression for one data output port, recursing through upstream
 // wires (ash-mesh expression-threading). Stateful nodes don't recurse — their
@@ -178,20 +179,29 @@ function computeOutputExpr(ctx: EmitCtx, node: GraphNode, portId: string): strin
     case "ollamaLLM":
     case "ollamaVLM":
       return stateVar(ctx, node, node.type === "pythonScript" ? "result" : "response");
-    default:
+    default: {
+      // Extended node library (Inputs / Logic / Math / Text / Lists / Outputs).
+      const extra = extraOutputExpr(ctx, node, portId);
+      if (extra !== null) return extra;
       ctx.warnings.push(`No emitter for node type "${node.type}" — emitted as null.`);
       return p.nil;
+    }
   }
+}
+
+/** Starting value of a state variable, typed like the runtime's config field. */
+function initialState(node: GraphNode, key: string): unknown {
+  const cfg = node.data.config ?? {};
+  if (node.type === "rangeNode" && key === "count") return Number(cfg.initialCount ?? 0);
+  if (key === "state" || key === "fired") return Boolean(cfg[key]);
+  if (key === "items" || key === "values") return Array.isArray(cfg[key]) ? cfg[key] : [];
+  return Number(cfg[key] ?? 0);
 }
 
 /** Declare-once state variable for a stateful node's output; returns its name. */
 export function stateVar(ctx: EmitCtx, node: GraphNode, key: string): string {
   const name = `${ctx.names.nameFor(node)}_${key}`;
-  const init =
-    node.type === "rangeNode" && key === "count"
-      ? Number(node.data.config?.initialCount ?? 0)
-      : Number(node.data.config?.[key] ?? 0);
-  addSetup(ctx, [ctx.profile.declare(name, literal(ctx.profile, init))]);
+  addSetup(ctx, [ctx.profile.declare(name, literal(ctx.profile, initialState(node, key)))]);
   return name;
 }
 

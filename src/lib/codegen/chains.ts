@@ -3,6 +3,7 @@ import type { EmitCtx } from "./expressions";
 import { addSetup, inputExpr, outputExpr, stateVar } from "./expressions";
 import { indent } from "./graph";
 import { literal } from "./profiles";
+import { requireHelper } from "./runtime-helpers";
 
 // Turns trigger wiring into sequential statements — the codegen mirror of
 // runTriggerLogic in the store. Each Manual Trigger node becomes one function;
@@ -114,6 +115,69 @@ export function stepInto(ctx: EmitCtx, node: GraphNode, inPort: string, seen: Se
       out.push(p.ifLine(`${v} >= ${Number(cfg.threshold ?? 1)}`));
       out.push(...indent([p.assign(v, String(Number(cfg.resetValue ?? 0))), ...body("spike")], unit));
       if (p.blockClose) out.push(p.blockClose);
+      break;
+    }
+    case "toggleNode": {
+      const v = stateVar(ctx, node, "state");
+      out.push(p.assign(v, inPort === "resetTrigger" ? p.bool(false) : p.not(v)));
+      out.push(...chainFrom(ctx, node, "outTrigger", seen));
+      break;
+    }
+    case "latchNode": {
+      const v = stateVar(ctx, node, "state");
+      // Set holds true, Reset holds false — the latch has only two commands.
+      if (inPort === "resetTrigger") out.push(p.assign(v, p.bool(false)));
+      else out.push(p.assign(v, p.bool(true)));
+      out.push(...chainFrom(ctx, node, "outTrigger", seen));
+      break;
+    }
+    case "listAppendNode": {
+      const v = stateVar(ctx, node, "items");
+      if (inPort === "resetTrigger") out.push(p.assign(v, literal(p, [])));
+      else out.push(p.listPush(v, inputExpr(ctx, node, "value")));
+      out.push(...chainFrom(ctx, node, "outTrigger", seen));
+      break;
+    }
+    case "valueListNode": {
+      const v = stateVar(ctx, node, "values");
+      out.push(p.listPush(v, inputExpr(ctx, node, "value")));
+      out.push(...chainFrom(ctx, node, "outTrigger", seen));
+      break;
+    }
+    case "gateNode": {
+      // Open uses the text-aware truthiness the runtime applies (toBool).
+      out.push(p.ifLine(`${requireHelper(ctx, "lb_to_bool")}(${inputExpr(ctx, node, "open")})`));
+      out.push(...indent(body("outTrigger"), unit));
+      if (p.blockClose) out.push(p.blockClose);
+      break;
+    }
+    case "onceNode": {
+      const fired = stateVar(ctx, node, "fired");
+      if (inPort === "resetTrigger") {
+        out.push(p.assign(fired, p.bool(false))); // re-arm; Reset fires nothing on
+        break;
+      }
+      out.push(p.ifLine(p.not(fired)));
+      out.push(...indent([p.assign(fired, p.bool(true)), ...body("outTrigger")], unit));
+      if (p.blockClose) out.push(p.blockClose);
+      break;
+    }
+    case "sequenceNode": {
+      const step = stateVar(ctx, node, "step");
+      if (inPort === "resetTrigger") {
+        out.push(p.assign(step, "0"));
+        break;
+      }
+      // One output per incoming trigger, cycling. Emitted as three separate
+      // `if`s (the profile has no else-if) reading the step captured before
+      // the advance below, so exactly one branch runs.
+      const ports = ["out1", "out2", "out3"];
+      ports.forEach((port, i) => {
+        out.push(p.ifLine(`${step} % ${ports.length} == ${i}`));
+        out.push(...indent(body(port), unit));
+        if (p.blockClose) out.push(p.blockClose);
+      });
+      out.push(p.assign(step, `(${step} + 1) % ${ports.length}`));
       break;
     }
     case "pythonScript": {

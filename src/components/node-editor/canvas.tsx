@@ -11,7 +11,7 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { useNodeEditorStore } from "./use-node-editor-store";
-import { nodeTypes } from "./custom-nodes";
+import { nodeTypes } from "./node-types-registry";
 import RadialMenu from "./radial-menu";
 import { MUTED_COLORS } from "@/lib/node-styles";
 
@@ -134,11 +134,12 @@ function FlowCanvas() {
         <MiniMap
           style={{ background: "#09090b", border: "1px solid #27272a" }}
           nodeColor={(n) => {
-            if (["triggerInput", "constNum", "constBool", "constString"].includes(n.type || "")) return MUTED_COLORS.blue;
-            if (["ifElseTrigger", "condValue", "delayNode", "counterNode", "forLoopNode", "whileLoopNode", "rangeNode"].includes(n.type || "")) return MUTED_COLORS.purple;
-            if (["compareNode", "expressionNode", "mathNode", "mathFunctionNode", "randomNode"].includes(n.type || "")) return MUTED_COLORS.amber;
-            if (["filterNode", "stringOpNode", "replaceTextNode"].includes(n.type || "")) return MUTED_COLORS.emerald;
-            if (["loggerNode", "textOutputNode", "assertNode"].includes(n.type || "")) return MUTED_COLORS.rose;
+            if (["triggerInput", "constNum", "constBool", "constString", "sliderInput", "textAreaInput", "currentTimeNode"].includes(n.type || "")) return MUTED_COLORS.blue;
+            if (["ifElseTrigger", "condValue", "delayNode", "counterNode", "forLoopNode", "whileLoopNode", "rangeNode", "gateNode", "onceNode", "sequenceNode"].includes(n.type || "")) return MUTED_COLORS.purple;
+            if (["compareNode", "expressionNode", "mathNode", "mathFunctionNode", "randomNode", "clampNode", "mapRangeNode", "lerpNode", "betweenNode", "roundToNode"].includes(n.type || "")) return MUTED_COLORS.amber;
+            if (["filterNode", "stringOpNode", "replaceTextNode", "splitTextNode", "joinTextNode", "substringNode", "templateNode", "jsonParseNode", "jsonStringifyNode", "toNumberNode", "toStringNode", "toBooleanNode", "regexMatchNode"].includes(n.type || "")) return MUTED_COLORS.emerald;
+            if (["listAppendNode", "listLengthNode", "listGetNode", "listStatsNode", "listSortNode", "listSliceNode", "listContainsNode"].includes(n.type || "")) return MUTED_COLORS.olive;
+            if (["loggerNode", "textOutputNode", "assertNode", "valueListNode", "gaugeNode"].includes(n.type || "")) return MUTED_COLORS.rose;
             if (["thresholdNeuron", "maxSelectorNode", "synapseNode", "leakyIntegrateFire"].includes(n.type || "")) return MUTED_COLORS.indigo;
             if (["imageInputGrid", "denseLayer", "conv1dLayer", "outputLayerNode"].includes(n.type || "")) return MUTED_COLORS.cyan;
             return MUTED_COLORS.teal;

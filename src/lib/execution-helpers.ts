@@ -1,4 +1,10 @@
 import { safeEvaluate } from "./safe-evaluator";
+// The node library grew past what one module can hold under the repo's
+// 500-line guardrail, so the newer nodes register their pure computations and
+// trigger behaviour through these registries instead of inline switch cases.
+import { EXTRA_COMPUTE, EXTRA_BYPASS_PORTS } from "./extra-node-compute";
+import { LIST_COMPUTE, LIST_BYPASS_PORTS } from "./list-node-compute";
+import { EXTRA_TRIGGER_OPS } from "./extra-trigger-ops";
 
 // Numeric-looking strings become numbers so the Formula node does math on
 // them; everything else stays as-is so `+` concatenates and comparisons work
@@ -64,6 +70,8 @@ const BYPASS_PORTS: Record<string, { primaryIn: string; primaryOut: string }> = 
   synapseNode: { primaryIn: "in", primaryOut: "out" },
   denseLayer: { primaryIn: "in", primaryOut: "out" },
   conv1dLayer: { primaryIn: "in", primaryOut: "out" },
+  ...EXTRA_BYPASS_PORTS,
+  ...LIST_BYPASS_PORTS,
 };
 
 /**
@@ -78,6 +86,9 @@ export function computeNodeOutputs(
   if (bypass && inputs.enabled === false) {
     return { [bypass.primaryOut]: inputs[bypass.primaryIn] };
   }
+
+  const registered = EXTRA_COMPUTE[type] ?? LIST_COMPUTE[type];
+  if (registered) return registered(inputs, config);
 
   const outputs: Record<string, any> = {};
 
@@ -336,6 +347,9 @@ export async function handleTriggerOperation(
   nextTriggerPort: string | null;
   updatedConfig?: Record<string, any>;
 }> {
+  const registered = EXTRA_TRIGGER_OPS[type];
+  if (registered) return registered(inputs, config, targetPortId);
+
   let nextTriggerPort: string | null = null;
   let updatedConfig: Record<string, any> | undefined = undefined;
 

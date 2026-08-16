@@ -140,3 +140,90 @@ describe("generateCode", () => {
     expect(c.code).toContain("TODO(port to C by hand)"); // [...].reverse().join("")
   });
 });
+
+describe("extended node library emitters", () => {
+  it("emits Round To with JS Math.round semantics in both languages", () => {
+    // floor(x * f + 0.5) / f — never the language's own round(), which is
+    // half-to-even in Python (the trap this asserts against).
+    const nodes = [makeNode("constNum", "n1", { value: 2.345 }), makeNode("roundToNode", "r1", { decimals: 2 })];
+    const edges = [edge("n1", "value", "r1", "value")];
+    expect(generateCode(nodes, edges, "javascript").code).toContain("(Math.floor(Number(2.345) * 100 + 0.5) / 100)");
+    const py = generateCode(nodes, edges, "python").code;
+    expect(py).toContain("(math.floor(float(2.345) * 100 + 0.5) / 100)");
+    expect(py).not.toContain("round(");
+  });
+
+  it("fills text templates from lettered inputs in either case", () => {
+    const nodes = [makeNode("constString", "s1", { value: "world" }), makeNode("templateNode", "t1", { template: "hi {A} {b}" })];
+    const edges = [edge("s1", "value", "t1", "a")];
+    const js = generateCode(nodes, edges, "javascript").code;
+    expect(js).toContain("function lb_to_str(v) {");
+    expect(js).toContain('.split("{A}").join(lb_to_str("world"))');
+    const py = generateCode(nodes, edges, "python").code;
+    expect(py).toContain("def lb_to_str(v):");
+    expect(py).toContain('.replace("{A}", lb_to_str("world"))');
+  });
+
+  it("emits list stats through a shared, deduped helper", () => {
+    const nodes = [makeNode("listStatsNode", "l1", { op: "avg" }), makeNode("listStatsNode", "l2", { op: "avg" })];
+    const js = generateCode(nodes, [], "javascript").code;
+    expect(js).toContain('lb_list_stats([], "avg")');
+    // whole-block dedup: two identical nodes must not emit the helper twice
+    expect(js.split("function lb_list_stats(").length - 1).toBe(1);
+    const py = generateCode(nodes, [], "python").code;
+    expect(py).toContain('lb_list_stats([], "avg")');
+    expect(py).toContain("def lb_list_stats(items, op):");
+  });
+
+  it("compiles a stateful Toggle into a flipped state variable", () => {
+    const nodes = [makeNode("triggerInput", "t1"), makeNode("toggleNode", "tg1")];
+    const edges = [edge("t1", "triggerOut", "tg1", "inTrigger")];
+    const js = generateCode(nodes, edges, "javascript").code;
+    expect(js).toContain("let toggle_1_state = false;");
+    expect(js).toContain("toggle_1_state = !(toggle_1_state);");
+    const py = generateCode(nodes, edges, "python").code;
+    expect(py).toContain("toggle_1_state = False");
+    expect(py).toContain("toggle_1_state = (not (toggle_1_state))");
+  });
+
+  it("compiles List Append into a real push on a list variable", () => {
+    const nodes = [makeNode("triggerInput", "t1"), makeNode("listAppendNode", "a1"), makeNode("constNum", "n1", { value: 7 })];
+    const edges = [edge("t1", "triggerOut", "a1", "inTrigger"), edge("n1", "value", "a1", "value")];
+    expect(generateCode(nodes, edges, "javascript").code).toContain("listappend_1_items.push(7);");
+    expect(generateCode(nodes, edges, "python").code).toContain("listappend_1_items.append(7)");
+  });
+
+  it("compiles the Gate control node into a guarded chain", () => {
+    const nodes = [makeNode("triggerInput", "t1"), makeNode("gateNode", "g1"), makeNode("loggerNode", "log1")];
+    const edges = [edge("t1", "triggerOut", "g1", "inTrigger"), edge("g1", "outTrigger", "log1", "inTrigger")];
+    const js = generateCode(nodes, edges, "javascript").code;
+    expect(js).toContain("if (lb_to_bool(true)) {");
+    expect(js).toContain("console.log(");
+    const py = generateCode(nodes, edges, "python").code;
+    expect(py).toContain("if lb_to_bool(True):");
+    expect(py).toContain("print(");
+  });
+
+  it("cycles the Sequence node's outputs and advances its step", () => {
+    const nodes = [makeNode("triggerInput", "t1"), makeNode("sequenceNode", "s1"), makeNode("loggerNode", "log1")];
+    const edges = [edge("t1", "triggerOut", "s1", "inTrigger"), edge("s1", "out2", "log1", "inTrigger")];
+    const js = generateCode(nodes, edges, "javascript").code;
+    expect(js).toContain("if (sequence_1_step % 3 == 1) {");
+    expect(js).toContain("sequence_1_step = (sequence_1_step + 1) % 3;");
+  });
+
+  it("has an emitter for every registered node type (coverage guard)", () => {
+    // Guards the gap this suite closed: a new node type added to
+    // NODE_DEFINITIONS without a codegen emitter fails here rather than
+    // silently emitting null in the code panel.
+    for (const type of Object.keys(NODE_DEFINITIONS)) {
+      const nodes = [makeNode(type, "solo")];
+      for (const language of ["javascript", "python"]) {
+        const res = generateCode(nodes, [], language);
+        const missing = res.warnings.filter((w) => w.includes("No emitter"));
+        expect(missing, `${type} (${language})`).toEqual([]);
+        expect(res.code, `${type} (${language})`).not.toContain("has no code mapping");
+      }
+    }
+  });
+});

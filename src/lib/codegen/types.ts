@@ -1,5 +1,6 @@
 import type { Node } from "@xyflow/react";
 import type { NodeData } from "@/types/nodes";
+import type { RuntimeHelper } from "./runtime-helpers";
 
 // Language targets shown in the code panel dropdown. `native` targets have a
 // real per-node emitter; the rest are derived from the JavaScript emission via
@@ -71,6 +72,16 @@ export interface LanguageProfile {
   maxOf: (items: string[]) => string;
   absNeg: (e: string) => string;
   randomInt: (min: string, max: string) => string;
+  /** plain truthiness cast (NOT the text-aware lb_to_bool helper) */
+  boolCast: (e: string) => string;
+  /** current time as epoch milliseconds */
+  nowEpochMs: string;
+  /** current time as a human-readable clock string */
+  nowFormatted: string;
+  /** append one item to an existing list variable, as a statement */
+  listPush: (name: string, expr: string) => string;
+  /** source lines of a named generated-program helper (runtime-helpers.ts) */
+  helper: (name: RuntimeHelper) => string[];
 }
 
 // One node's contribution to the program (ash-mesh `emit()` contract):

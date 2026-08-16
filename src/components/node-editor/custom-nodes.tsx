@@ -22,16 +22,18 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
   const toggleNodeFederated = useNodeEditorStore((state) => state.toggleNodeFederated);
 
   // Style categories
-  let category: "Inputs" | "Logic" | "Control Flow" | "Math & Compare" | "Data & Text" | "Outputs" | "AI & Scripts" | "Neural Network" | "AI Model" = "Logic";
-  if (["triggerInput", "constNum", "constBool", "constString"].includes(type || "")) {
+  let category: "Inputs" | "Logic" | "Control Flow" | "Math & Compare" | "Data & Text" | "Lists" | "Outputs" | "AI & Scripts" | "Neural Network" | "AI Model" = "Logic";
+  if (["triggerInput", "constNum", "constBool", "constString", "sliderInput", "textAreaInput", "currentTimeNode"].includes(type || "")) {
     category = "Inputs";
-  } else if (["ifElseTrigger", "condValue", "delayNode", "counterNode", "forLoopNode", "whileLoopNode", "rangeNode"].includes(type || "")) {
+  } else if (["ifElseTrigger", "condValue", "delayNode", "counterNode", "forLoopNode", "whileLoopNode", "rangeNode", "gateNode", "onceNode", "sequenceNode"].includes(type || "")) {
     category = "Control Flow";
-  } else if (["compareNode", "expressionNode", "mathNode", "mathFunctionNode", "randomNode"].includes(type || "")) {
+  } else if (["compareNode", "expressionNode", "mathNode", "mathFunctionNode", "randomNode", "clampNode", "mapRangeNode", "lerpNode", "betweenNode", "roundToNode"].includes(type || "")) {
     category = "Math & Compare";
-  } else if (["filterNode", "stringOpNode", "replaceTextNode"].includes(type || "")) {
+  } else if (["filterNode", "stringOpNode", "replaceTextNode", "splitTextNode", "joinTextNode", "substringNode", "templateNode", "jsonParseNode", "jsonStringifyNode", "toNumberNode", "toStringNode", "toBooleanNode", "regexMatchNode"].includes(type || "")) {
     category = "Data & Text";
-  } else if (["loggerNode", "textOutputNode", "assertNode"].includes(type || "")) {
+  } else if (["listAppendNode", "listLengthNode", "listGetNode", "listStatsNode", "listSortNode", "listSliceNode", "listContainsNode"].includes(type || "")) {
+    category = "Lists";
+  } else if (["loggerNode", "textOutputNode", "assertNode", "valueListNode", "gaugeNode"].includes(type || "")) {
     category = "Outputs";
   } else if (["pythonScript", "ollamaLLM", "ollamaVLM"].includes(type || "")) {
     category = "AI & Scripts";
@@ -440,45 +442,3 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
 };
 
 export const CustomNode = memo(CustomNodeComponent);
-
-export const nodeTypes = {
-  triggerInput: CustomNode,
-  constNum: CustomNode,
-  constBool: CustomNode,
-  constString: CustomNode,
-  andGate: CustomNode,
-  orGate: CustomNode,
-  notGate: CustomNode,
-  xorGate: CustomNode,
-  norGate: CustomNode,
-  nandGate: CustomNode,
-  ifElseTrigger: CustomNode,
-  condValue: CustomNode,
-  delayNode: CustomNode,
-  counterNode: CustomNode,
-  rangeNode: CustomNode,
-  compareNode: CustomNode,
-  expressionNode: CustomNode,
-  loggerNode: CustomNode,
-  assertNode: CustomNode,
-  pythonScript: CustomNode,
-  ollamaLLM: CustomNode,
-  ollamaVLM: CustomNode,
-  randomNode: CustomNode,
-  textOutputNode: CustomNode,
-  mathNode: CustomNode,
-  mathFunctionNode: CustomNode,
-  filterNode: CustomNode,
-  stringOpNode: CustomNode,
-  replaceTextNode: CustomNode,
-  forLoopNode: CustomNode,
-  whileLoopNode: CustomNode,
-  thresholdNeuron: CustomNode,
-  maxSelectorNode: CustomNode,
-  synapseNode: CustomNode,
-  leakyIntegrateFire: CustomNode,
-  imageInputGrid: CustomNode,
-  denseLayer: CustomNode,
-  conv1dLayer: CustomNode,
-  outputLayerNode: CustomNode,
-};

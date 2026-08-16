@@ -1,4 +1,5 @@
 import type { LanguageProfile } from "./types";
+import { helperSource } from "./runtime-helpers";
 
 // The two native emission languages. All other targets are derived from the
 // JavaScript emission through line adapters (adapters.ts).
@@ -42,6 +43,11 @@ export const jsProfile: LanguageProfile = {
   maxOf: (items) => `Math.max(${items.join(", ")})`,
   absNeg: (e) => `-Math.abs(${e})`,
   randomInt: (min, max) => `(Math.floor(Math.random() * ((${max}) - (${min}) + 1)) + (${min}))`,
+  boolCast: (e) => `Boolean(${e})`,
+  nowEpochMs: "Date.now()",
+  nowFormatted: "new Date().toLocaleTimeString()",
+  listPush: (name, expr) => `${name}.push(${expr});`,
+  helper: (name) => helperSource("javascript", name),
 };
 
 export const pyProfile: LanguageProfile = {
@@ -85,6 +91,11 @@ export const pyProfile: LanguageProfile = {
   maxOf: (items) => `max(${items.join(", ")})`,
   absNeg: (e) => `-abs(${e})`,
   randomInt: (min, max) => `random.randint(int(${min}), int(${max}))`,
+  boolCast: (e) => `bool(${e})`,
+  nowEpochMs: "int(time.time() * 1000)",
+  nowFormatted: 'time.strftime("%H:%M:%S")',
+  listPush: (name, expr) => `${name}.append(${expr})`,
+  helper: (name) => helperSource("python", name),
 };
 
 /** Literal for a static port value in the given language. */

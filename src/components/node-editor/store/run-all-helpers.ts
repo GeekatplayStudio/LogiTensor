@@ -113,7 +113,9 @@ export const updateLayerEdges = (layerEdges: Edge[], layerNodes: Node<NodeData>[
                       edge.sourceHandle === "outTrigger" ||
                       edge.sourceHandle === "onTrue" ||
                       edge.sourceHandle === "onFalse" ||
-                      edge.sourceHandle === "spike";
+                      edge.sourceHandle === "spike" ||
+                      // Sequence node's three ordered trigger outs
+                      ["out1", "out2", "out3"].includes(edge.sourceHandle || "");
 
     if (isTrigger) {
       return {

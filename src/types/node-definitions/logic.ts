@@ -73,4 +73,46 @@ export const LOGIC_NODES: Record<string, NodeDefinition> = {
     ],
     outputs: [{ id: "out", name: "Out", type: "data", dataType: "boolean" }],
   },
+  xnorGate: {
+    type: "xnorGate",
+    label: "XNOR Gate",
+    category: "Logic",
+    description: "Logical XNOR operation. True if both inputs are the same.",
+    inputs: [
+      { id: "a", name: "A", type: "data", dataType: "boolean", value: false },
+      { id: "b", name: "B", type: "data", dataType: "boolean", value: false },
+      ENABLED_INPUT,
+    ],
+    outputs: [{ id: "out", name: "Out", type: "data", dataType: "boolean" }],
+  },
+  toggleNode: {
+    type: "toggleNode",
+    label: "Toggle",
+    category: "Logic",
+    description: "Flips a stored boolean every time it is triggered (a flip-flop switch).",
+    inputs: [
+      { id: "inTrigger", name: "Flip", type: "trigger" },
+      { id: "resetTrigger", name: "Reset", type: "trigger" },
+    ],
+    outputs: [
+      { id: "outTrigger", name: "Out", type: "trigger" },
+      { id: "state", name: "State", type: "data", dataType: "boolean" },
+    ],
+    config: { state: false },
+  },
+  latchNode: {
+    type: "latchNode",
+    label: "SR Latch",
+    category: "Logic",
+    description: "Set/Reset latch: Set holds the state true, Reset holds it false, until the other fires.",
+    inputs: [
+      { id: "setTrigger", name: "Set", type: "trigger" },
+      { id: "resetTrigger", name: "Reset", type: "trigger" },
+    ],
+    outputs: [
+      { id: "outTrigger", name: "Out", type: "trigger" },
+      { id: "state", name: "State", type: "data", dataType: "boolean" },
+    ],
+    config: { state: false },
+  },
 };

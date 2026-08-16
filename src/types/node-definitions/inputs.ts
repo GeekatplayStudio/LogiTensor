@@ -36,4 +36,33 @@ export const INPUT_NODES: Record<string, NodeDefinition> = {
     outputs: [{ id: "value", name: "Value", type: "data", dataType: "string" }],
     config: { value: "hello" },
   },
+  sliderInput: {
+    type: "sliderInput",
+    label: "Slider",
+    category: "Inputs",
+    description: "Outputs a number chosen with a slider, bounded by a configurable min/max/step.",
+    inputs: [],
+    outputs: [{ id: "value", name: "Value", type: "data", dataType: "number" }],
+    config: { value: 50, min: 0, max: 100, step: 1 },
+  },
+  textAreaInput: {
+    type: "textAreaInput",
+    label: "Multiline Text",
+    category: "Inputs",
+    description: "Outputs a multi-line text value typed into a resizable text area.",
+    inputs: [],
+    outputs: [{ id: "value", name: "Value", type: "data", dataType: "string" }],
+    config: { value: "" },
+  },
+  currentTimeNode: {
+    type: "currentTimeNode",
+    label: "Current Time",
+    category: "Inputs",
+    description: "Outputs the current time as epoch milliseconds plus a human-readable clock string.",
+    inputs: [],
+    outputs: [
+      { id: "epoch", name: "Epoch (ms)", type: "data", dataType: "number" },
+      { id: "formatted", name: "Formatted", type: "data", dataType: "string" },
+    ],
+  },
 };

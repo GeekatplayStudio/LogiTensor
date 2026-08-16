@@ -16,6 +16,8 @@ export interface NlApplyResult {
   edges: Edge[];
   /** per-item problems — rejected items are skipped, the rest still applies */
   problems: string[];
+  /** post-build wiring audit (unconnected nodes, missing triggers, …) */
+  connectivity: string[];
 }
 
 /** Compact schema of every node type, sent to the model as its vocabulary. */
@@ -67,6 +69,9 @@ export function materializeNlGraph(spec: NlGraphSpec, idPrefix = `nl_${Date.now(
 
   const edges: Edge[] = [];
   for (const e of spec.edges ?? []) {
+    // Weak models routinely emit half-null edges; drop them quietly rather
+    // than reporting a confusing "endpoint not found" for an obvious non-edge.
+    if (!e.source || !e.target || !e.sourceHandle || !e.targetHandle) continue;
     const source = idMap.get(String(e.source));
     const target = idMap.get(String(e.target));
     const srcNode = nodes.find((n) => n.id === source);
@@ -97,7 +102,49 @@ export function materializeNlGraph(spec: NlGraphSpec, idPrefix = `nl_${Date.now(
   }
 
   autoLayout(nodes, edges);
-  return { nodes, edges, problems };
+  return { nodes, edges, problems, connectivity: auditConnectivity(nodes, edges) };
+}
+
+/**
+ * Post-build wiring audit. The model can return a syntactically valid graph
+ * whose nodes are simply not wired together — which looked like "it added
+ * nodes but nothing works". Surfacing this explicitly turns a silent failure
+ * into a visible, actionable one.
+ */
+export function auditConnectivity(nodes: Node<NodeData>[], edges: Edge[]): string[] {
+  const notes: string[] = [];
+  const wired = new Set<string>();
+  for (const e of edges) {
+    wired.add(e.source);
+    wired.add(e.target);
+  }
+
+  for (const n of nodes) {
+    if (!wired.has(n.id)) {
+      notes.push(`${n.data.label} is not connected to anything.`);
+      continue;
+    }
+    // A trigger-driven node that nothing ever fires will never execute.
+    const triggerIns = n.data.inputs.filter((i) => i.type === "trigger");
+    if (triggerIns.length > 0) {
+      const fired = triggerIns.some((i) => edges.some((e) => e.target === n.id && e.targetHandle === i.id));
+      if (!fired) notes.push(`${n.data.label} has no trigger wired — it will never run.`);
+    }
+    // Data inputs left at their default when the flow clearly meant to feed them.
+    for (const port of n.data.inputs) {
+      if (port.type !== "data" || port.id === "enabled") continue;
+      const fed = edges.some((e) => e.target === n.id && e.targetHandle === port.id);
+      if (!fed && port.value === undefined) {
+        notes.push(`${n.data.label}.${port.name} has no value and nothing wired into it.`);
+      }
+    }
+  }
+
+  if (nodes.some((n) => n.data.inputs.some((i) => i.type === "trigger")) &&
+      !nodes.some((n) => n.type === "triggerInput")) {
+    notes.push("No Manual Trigger in the flow — add one to be able to run it.");
+  }
+  return notes;
 }
 
 // Layered left-to-right placement by topological depth — enough for the small

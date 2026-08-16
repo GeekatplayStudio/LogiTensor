@@ -1,11 +1,14 @@
 from backend.safe_evaluator import safe_evaluate
 from backend.engine.state import ACTIVE_TYPES
+from backend.engine.extra import EXTRA_BYPASS_PORTS
+from backend.engine.lists import LIST_BYPASS_PORTS
 
 
 def _is_trigger_handle(handle) -> bool:
     return bool(handle) and (
         str(handle).endswith("Trigger")
-        or handle in ("triggerOut", "outTrigger", "onTrue", "onFalse", "done", "loopBody", "spike")
+        # out1/out2/out3 are the Sequence node's ordered trigger outputs.
+        or handle in ("triggerOut", "outTrigger", "onTrue", "onFalse", "done", "loopBody", "spike", "out1", "out2", "out3")
     )
 
 
@@ -78,4 +81,6 @@ BYPASS_PORTS = {
     "synapseNode": ("in", "out"),
     "denseLayer": ("in", "out"),
     "conv1dLayer": ("in", "out"),
+    **EXTRA_BYPASS_PORTS,
+    **LIST_BYPASS_PORTS,
 }

@@ -35,4 +35,29 @@ export const OUTPUT_NODES: Record<string, NodeDefinition> = {
     ],
     outputs: [{ id: "pass", name: "Pass", type: "data", dataType: "boolean" }],
   },
+  valueListNode: {
+    type: "valueListNode",
+    label: "Value List",
+    category: "Outputs",
+    description: "Accumulates values, appending the current Value as a new line each time it is triggered.",
+    inputs: [
+      { id: "inTrigger", name: "Record", type: "trigger" },
+      { id: "value", name: "Value", type: "data", dataType: "any", value: 0 },
+    ],
+    outputs: [
+      { id: "outTrigger", name: "Out", type: "trigger" },
+      { id: "list", name: "List", type: "data", dataType: "any" },
+      { id: "length", name: "Length", type: "data", dataType: "number" },
+    ],
+    config: { values: [] as any[] },
+  },
+  gaugeNode: {
+    type: "gaugeNode",
+    label: "Gauge",
+    category: "Outputs",
+    description: "Displays the incoming number as a bar filling between a configured Min and Max.",
+    inputs: [{ id: "value", name: "Value", type: "data", dataType: "number", value: 0 }],
+    outputs: [{ id: "percent", name: "Percent", type: "data", dataType: "number" }],
+    config: { min: 0, max: 100 },
+  },
 };
