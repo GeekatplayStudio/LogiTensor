@@ -37,6 +37,35 @@ def _body_owned_ids(trigger_edges: List[Dict[str, Any]], active_ids: Set[str]) -
     return owned
 
 
+def _data_dependency_order(node_ids: List[str], edges_json: List[Dict[str, Any]]) -> List[str]:
+    """Sorts nodes so anything reading another's data output comes after it.
+
+    Depth is measured through DATA edges only, and through intervening passive
+    nodes, so a Text Output reading a Math Function that reads two Random
+    Numbers sorts after both of them.
+    """
+    preds: Dict[str, List[str]] = {}
+    for edge in edges_json:
+        if _is_trigger_handle(edge.get("sourceHandle")):
+            continue
+        preds.setdefault(edge.get("target"), []).append(edge.get("source"))
+
+    cache: Dict[str, int] = {}
+
+    def depth(nid: str, seen: Set[str]) -> int:
+        if nid in cache:
+            return cache[nid]
+        if nid in seen:  # data cycle — treat as a root rather than recursing
+            return 0
+        seen.add(nid)
+        d = max((depth(p, seen) + 1 for p in preds.get(nid, [])), default=0)
+        cache[nid] = d
+        return d
+
+    order = {nid: i for i, nid in enumerate(node_ids)}
+    return sorted(node_ids, key=lambda n: (depth(n, set()), order[n]))
+
+
 async def compile_and_run_graph(nodes_json: List[Any], edges_json: List[Any]) -> Dict[str, Any]:
     """
     Runs the Next.js visual node structure and returns execution logs, outputs
@@ -59,26 +88,44 @@ async def compile_and_run_graph(nodes_json: List[Any], edges_json: List[Any]) ->
     active_ids = {n["id"] for n in active_nodes}
     trigger_edges = [e for e in edges_json if _is_trigger_handle(e.get("sourceHandle"))]
 
-    # 1. Entry points: the Manual Triggers, in authoring order. With none, fall
-    # back to the first active node that isn't owned by a loop body.
+    # 1. Entry points. Manual Triggers come first, in authoring order.
     body_owned = _body_owned_ids(trigger_edges, active_ids)
+    adjacency = _trigger_adjacency(trigger_edges, active_ids)
     entries = [n["id"] for n in active_nodes if n["type"] == "triggerInput" and n["id"] not in body_owned]
-    if not entries:
-        entries = [n["id"] for n in active_nodes if n["id"] not in body_owned][:1]
+
+    def _reach(seeds: List[str]) -> Set[str]:
+        seen: Set[str] = set()
+        frontier = list(seeds)
+        while frontier:
+            nid = frontier.pop()
+            if nid in seen:
+                continue
+            seen.add(nid)
+            frontier.extend(adjacency.get(nid, []))
+        return seen
+
+    # Then every active node that nothing else drives: no trigger edge feeds it,
+    # no loop owns it, and no Manual Trigger reaches it. Without this, a board
+    # wired purely with data edges (say two Random Numbers feeding a Math
+    # Function) ran exactly ONE node — the old fallback took `[:1]` — and
+    # everything else was reported as "skipped". Run means run the board.
+    driven = {e["target"] for e in trigger_edges if e.get("target") in active_ids}
+    reachable = _reach(entries)
+    orphans = [
+        n["id"] for n in active_nodes
+        if n["id"] not in body_owned and n["id"] not in driven and n["id"] not in reachable
+    ]
+    # Producers must run before consumers, or a consumer would resolve an
+    # upstream active node on demand and (for Random Number) get a different
+    # value than the one that node publishes when it runs itself.
+    entries += _data_dependency_order(orphans, edges_json)
+
     if not entries:
         return {"success": True, "logs": ["No active execution nodes found."], "outputs": {}, "trace": []}
 
     # 2. Report — but do not execute — nodes no trigger path can ever reach
     # (e.g. bridge clones sitting in a dimension with no trigger wiring).
-    adjacency = _trigger_adjacency(trigger_edges, active_ids)
-    reachable: Set[str] = set()
-    frontier = list(entries)
-    while frontier:
-        nid = frontier.pop()
-        if nid in reachable:
-            continue
-        reachable.add(nid)
-        frontier.extend(adjacency.get(nid, []))
+    reachable = _reach(entries)
 
     startup_logs = ["Graph compiled successfully. Starting execution."]
     skipped = sorted(active_ids - reachable)

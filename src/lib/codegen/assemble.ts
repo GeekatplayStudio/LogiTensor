@@ -5,6 +5,7 @@ import { indentLines, joinLines, tag } from "./lines";
 import type { EmitCtx } from "./expressions";
 import { outputExpr } from "./expressions";
 import { chainFrom, stepInto } from "./chains";
+import { flushPending, nodeComment, resetScope } from "./materialize";
 
 // Assembles a full program for one native language: header imports → setup
 // (state vars + helpers, content-deduped) → one function per Manual Trigger →
@@ -21,6 +22,9 @@ export function assembleNative(nodes: GraphNode[], edges: Edge[], profile: Langu
     warnings: [],
     visiting: new Set(),
     emitted: new Set(),
+    pending: [],
+    materialized: new Map(),
+    noMaterialize: 0,
   };
   const unit = profile.id === "python" ? "    " : "  ";
 
@@ -29,6 +33,8 @@ export function assembleNative(nodes: GraphNode[], edges: Edge[], profile: Langu
   for (const node of nodes) {
     if (node.type !== "triggerInput") continue;
     ctx.emitted.add(node.id);
+    // Each generated function is its own variable scope.
+    resetScope(ctx);
     const body = chainFrom(ctx, node, "triggerOut", new Set());
     triggerFns.push({
       name: `run_${ctx.names.nameFor(node, "trigger")}`,
@@ -41,6 +47,8 @@ export function assembleNative(nodes: GraphNode[], edges: Edge[], profile: Langu
   // Trigger (or a side-effecting node left unwired) generated nothing at all —
   // its whole logic was invisible in the panel. Their action is emitted under
   // a labeled section so it's clear nothing triggers them yet.
+  // Steps 2 and 3 both emit into `main`, so they share one variable scope.
+  resetScope(ctx);
   const unreached: CodeLine[] = [];
   for (const node of nodes) {
     if (ctx.emitted.has(node.id)) continue;
@@ -57,7 +65,12 @@ export function assembleNative(nodes: GraphNode[], edges: Edge[], profile: Langu
       if (port.type !== "data") continue;
       if (graph.edgesFrom(node.id, port.id).length > 0) continue;
       if (node.type === "triggerInput" || node.type === "imageInputGrid") continue;
-      terminals.push(...tag([profile.print(`${JSON.stringify(`${node.data.label}.${port.name} =`)}, ${outputExpr(ctx, node, port.id)}`)], node.id));
+      const expr = outputExpr(ctx, node, port.id);
+      // The node's own named assignment (if any) has to precede the print, and
+      // already carries the naming comment; otherwise add one here.
+      const declared = flushPending(ctx);
+      terminals.push(...(declared.length ? declared : tag([profile.comment(nodeComment(node))], node.id)));
+      terminals.push(...tag([profile.print(`${JSON.stringify(`${node.data.label}.${port.name} =`)}, ${expr}`)], node.id));
     }
   }
 

@@ -54,7 +54,7 @@ describe("buildRunReport", () => {
     const missing = report.neverExecuted.find((n) => n.nodeId === "rand_b");
     expect(missing).toBeDefined();
     expect(missing?.label).toBe("Random B");
-    expect(missing?.reason).toMatch(/no trigger edge is wired/i);
+    expect(missing?.reason).toMatch(/nothing drives it/i);
     expect(report.neverExecuted.some((n) => n.nodeId === "rand_a")).toBe(false);
   });
 

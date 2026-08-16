@@ -30,12 +30,14 @@ describe("generateCode", () => {
   it("emits a terminal print for a pure data graph in JS and Python", () => {
     const nodes = [makeNode("constNum", "n1", { value: 4 }), makeNode("mathFunctionNode", "f1", { op: "sqrt" })];
     const edges = [edge("n1", "value", "f1", "a")];
+    // The function's result is bound to a name, and the print reads the name —
+    // a single-consumer constant stays inlined into that assignment.
     const js = generateCode(nodes, edges, "javascript");
-    expect(js.code).toContain("Math.sqrt(Number(4))");
-    expect(js.code).toContain("console.log");
+    expect(js.code).toContain("let mathfunction_1_out = Math.sqrt(Number(4));");
+    expect(js.code).toContain("console.log(\"Math Function.Result =\", mathfunction_1_out);");
     const py = generateCode(nodes, edges, "python");
-    expect(py.code).toContain("math.sqrt(float(4))");
-    expect(py.code).toContain("print(");
+    expect(py.code).toContain("mathfunction_1_out = math.sqrt(float(4))");
+    expect(py.code).toContain('print("Math Function.Result =", mathfunction_1_out)');
   });
 
   it("threads expressions through logic gates with language-correct operators", () => {
@@ -45,8 +47,8 @@ describe("generateCode", () => {
       makeNode("andGate", "g1"),
     ];
     const edges = [edge("b1", "value", "g1", "a"), edge("b2", "value", "g1", "b")];
-    expect(generateCode(nodes, edges, "javascript").code).toContain("(true && false)");
-    expect(generateCode(nodes, edges, "python").code).toContain("(True and False)");
+    expect(generateCode(nodes, edges, "javascript").code).toContain("let and_1_out = (true && false);");
+    expect(generateCode(nodes, edges, "python").code).toContain("and_1_out = (True and False)");
   });
 
   it("compiles a trigger chain: manual trigger -> if/else -> logger", () => {
@@ -84,7 +86,7 @@ describe("generateCode", () => {
       makeNode("mathNode", "m1", { expression: "A + B" }),
     ];
     const edges = [edge("n1", "value", "m1", "a"), edge("n2", "value", "m1", "b")];
-    expect(generateCode(nodes, edges, "javascript").code).toContain("(2 + 3)");
+    expect(generateCode(nodes, edges, "javascript").code).toContain("let math_1_out = (2 + 3);");
   });
 
   it("cuts trigger loops with a marker instead of recursing forever", () => {
@@ -138,6 +140,98 @@ describe("generateCode", () => {
     expect(c.code).toContain("#include <stdio.h>");
     expect(c.code).toContain("int main()");
     expect(c.code).toContain("TODO(port to C by hand)"); // [...].reverse().join("")
+  });
+});
+
+describe("named intermediate variables", () => {
+  // The reported graph: two Random Numbers -> Math Function (abs) -> Text
+  // Output. It used to compile to a single `print(abs(...))` with no line
+  // belonging to the Math Function at all — "where is the Math Function?".
+  const nodes = [
+    makeNode("randomNode", "r1"),
+    makeNode("randomNode", "r2"),
+    makeNode("mathFunctionNode", "f1", { op: "abs" }),
+    makeNode("textOutputNode", "o1"),
+  ];
+  const edges = [
+    edge("r1", "value", "f1", "a"),
+    edge("r2", "value", "f1", "b"),
+    edge("f1", "out", "o1", "value"),
+  ];
+
+  it("gives every node in the flow at least one attributable line", () => {
+    for (const language of ["javascript", "python"] as const) {
+      const res = generateCode(nodes, edges, language);
+      for (const id of ["r1", "r2", "f1", "o1"]) {
+        expect(linesForNode(res, id).length, `${id} (${language})`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("names the Math Function's result and prints it by name", () => {
+    const py = generateCode(nodes, edges, "python").code;
+    expect(py).toContain("# Math Function (abs)");
+    expect(py).toContain("mathfunction_1_out = abs(float(random_1_value))");
+    expect(py).toContain("print(mathfunction_1_out)");
+    const js = generateCode(nodes, edges, "javascript").code;
+    expect(js).toContain("// Math Function (abs)");
+    expect(js).toContain("let mathfunction_1_out = Math.abs(Number(random_1_value));");
+    expect(js).toContain("console.log(mathfunction_1_out);");
+  });
+
+  it("assigns a producer above the consumer that reads it", () => {
+    const res = generateCode(nodes, edges, "python");
+    const lineOf = (needle: string) => res.lines.findIndex((l) => l.text.includes(needle));
+    const producer = lineOf("random_1_value = random.randint");
+    const consumer = lineOf("mathfunction_1_out = abs");
+    const printed = lineOf("print(mathfunction_1_out)");
+    expect(producer).toBeGreaterThan(-1);
+    expect(producer).toBeLessThan(consumer);
+    expect(consumer).toBeLessThan(printed);
+  });
+
+  it("emits a shared producer once and references it twice", () => {
+    // One Random feeding both Math Function inputs. Inlining used to draw the
+    // random number twice, so A and B disagreed — a correctness bug, not just
+    // a readability one.
+    const shared = [makeNode("randomNode", "r1"), makeNode("mathFunctionNode", "f1", { op: "min" })];
+    const sharedEdges = [edge("r1", "value", "f1", "a"), edge("r1", "value", "f1", "b")];
+    const py = generateCode(shared, sharedEdges, "python").code;
+    expect(py.split("random.randint").length - 1).toBe(1);
+    expect(py).toContain("min(float(random_1_value), float(random_1_value))");
+    const js = generateCode(shared, sharedEdges, "javascript").code;
+    expect(js.split("Math.random(").length - 1).toBe(1);
+  });
+
+  it("keeps a single-use constant inlined but names a shared one", () => {
+    // Rule: constants are as readable inlined as behind a name — unless two
+    // consumers read them, where the name documents that it is one value.
+    const solo = [makeNode("constNum", "n1", { value: 5 }), makeNode("notGate", "g1")];
+    expect(generateCode(solo, [edge("n1", "value", "g1", "a")], "javascript").code).toContain("let not_1_out = !(5);");
+
+    const two = [makeNode("constNum", "n1", { value: 5 }), makeNode("notGate", "g1"), makeNode("notGate", "g2")];
+    const js = generateCode(two, [edge("n1", "value", "g1", "a"), edge("n1", "value", "g2", "a")], "javascript").code;
+    expect(js).toContain("let constnum_1_value = 5;");
+    expect(js).toContain("let not_1_out = !(constnum_1_value);");
+    expect(js).toContain("let not_2_out = !(constnum_1_value);");
+  });
+
+  it("keeps a while condition inline so the loop can still terminate", () => {
+    // Hoisting the condition into a variable above the loop would freeze it.
+    const loop = [
+      makeNode("triggerInput", "t1"),
+      makeNode("whileLoopNode", "w1"),
+      makeNode("counterNode", "c1"),
+      makeNode("compareNode", "cmp1", { op: "<" }),
+    ];
+    const loopEdges = [
+      edge("t1", "triggerOut", "w1", "inTrigger"),
+      edge("c1", "count", "cmp1", "a"),
+      edge("cmp1", "out", "w1", "condition"),
+    ];
+    const js = generateCode(loop, loopEdges, "javascript").code;
+    expect(js).toContain("while (((Number(counter_1_count) < Number(0))");
+    expect(js).not.toContain("let compare_1_out =");
   });
 });
 

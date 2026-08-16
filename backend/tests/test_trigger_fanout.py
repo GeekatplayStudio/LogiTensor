@@ -217,16 +217,77 @@ def test_chain_regression_still_works():
     assert "value" in res["outputs"]["r2"]
 
 
-def test_unreachable_node_is_reported_not_executed():
-    """Case C: r2 is unwired, so it is logged as skipped and never runs."""
+def test_undriven_node_runs_on_its_own():
+    """An active node nothing drives is its own entry point, even when other
+    parts of the board have a Manual Trigger.
+
+    This deliberately replaced the older "unwired node is skipped" rule. The
+    alternative — only self-starting undriven nodes when the board has no
+    trigger at all — means adding an unrelated Manual Trigger somewhere would
+    silently stop a data-wired node from running, which is a worse surprise
+    than an extra node executing.
+    """
     nodes = [_trigger(), _random("r1"), _random("r2")]
     edges = [_edge("e1", "t1", "triggerOut", "r1")]
 
     res = _run(nodes, edges)
 
-    assert res["trace"] == ["t1", "r1"]
-    assert "r2" not in res["outputs"]
-    assert any("no trigger path from an entry point: r2" in line for line in res["logs"])
+    assert res["trace"] == ["t1", "r1", "r2"]
+    assert "value" in res["outputs"]["r2"]
+    assert not any("no trigger path" in line for line in res["logs"])
+
+
+def test_pure_data_flow_board_runs_every_node_in_dependency_order():
+    """The reported bug: two Random Numbers feeding a Math Function feeding a
+    Text Output, with no trigger wiring at all. Only ONE Random ran, because
+    the entry-point fallback took the first active node and nothing else.
+    """
+    math_node = {
+        "id": "mf",
+        "type": "mathFunctionNode",
+        "data": {
+            "label": "Math Function",
+            "type": "mathFunctionNode",
+            "inputs": [
+                {"id": "a", "name": "A", "type": "data", "dataType": "number", "value": 0},
+                {"id": "b", "name": "B", "type": "data", "dataType": "number", "value": 0},
+            ],
+            "outputs": [{"id": "out", "name": "Result", "type": "data", "dataType": "number"}],
+            "config": {"op": "max"},
+        },
+    }
+    text_out = {
+        "id": "to",
+        "type": "textOutputNode",
+        "data": {
+            "label": "Text Output",
+            "type": "textOutputNode",
+            "inputs": [
+                {"id": "inTrigger", "name": "In", "type": "trigger"},
+                {"id": "value", "name": "Value", "type": "data", "dataType": "any", "value": 0},
+            ],
+            "outputs": [{"id": "outTrigger", "name": "Out", "type": "trigger"}],
+            "config": {},
+        },
+    }
+    nodes = [_random("r1"), _random("r2"), math_node, text_out]
+    edges = [
+        {"id": "d1", "source": "r1", "sourceHandle": "value", "target": "mf", "targetHandle": "a"},
+        {"id": "d2", "source": "r2", "sourceHandle": "value", "target": "mf", "targetHandle": "b"},
+        {"id": "d3", "source": "mf", "sourceHandle": "out", "target": "to", "targetHandle": "value"},
+    ]
+
+    res = _run(nodes, edges)
+
+    # Both randoms run, and the consumer runs after them — not before, or it
+    # would resolve them on demand and see different random values.
+    assert res["trace"] == ["r1", "r2", "to"]
+    assert "value" in res["outputs"]["r1"]
+    assert "value" in res["outputs"]["r2"]
+    # The Math Function actually combined BOTH randoms.
+    expected = max(res["outputs"]["r1"]["value"], res["outputs"]["r2"]["value"])
+    assert res["outputs"]["mf"]["out"] == expected
+    assert res["outputs"]["to"]["value"] == expected
 
 
 def test_multiple_entry_points_each_run_their_chain():

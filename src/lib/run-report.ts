@@ -221,8 +221,11 @@ export function buildRunReport(input: RunReportInput): RunReport {
     } else if (type === "triggerInput") {
       reason = "Manual Trigger was not fired during this run.";
     } else if (!hasIncomingTrigger) {
+      // Undriven active nodes are their own entry points, so reaching here
+      // means the run itself didn't get to it (older engine build, a failure
+      // partway through, or it isn't backend-executed at all).
       reason =
-        "No trigger edge is wired into any of its trigger input ports — nothing can ever start it.";
+        "Nothing drives it, so it should have self-started as its own entry point — it did not. If the backend was started before this build, restart it.";
     } else if (!reachable.has(node.id)) {
       reason =
         "Wired to a trigger, but that chain is not reachable from any Manual Trigger node.";

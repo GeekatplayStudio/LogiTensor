@@ -4,6 +4,7 @@ import { addSetup, inputExpr, outputExpr, stateVar } from "./expressions";
 import { indentLines, tag } from "./lines";
 import { literal } from "./profiles";
 import { requireHelper } from "./runtime-helpers";
+import { flushPending, nodeComment, scoped, withoutMaterialization } from "./materialize";
 
 // Turns trigger wiring into sequential statements — the codegen mirror of
 // runTriggerLogic in the store. Each Manual Trigger node becomes one function;
@@ -43,14 +44,26 @@ export function stepInto(ctx: EmitCtx, node: GraphNode, inPort: string, seen: Se
   const out: CodeLine[] = [];
   // Everything this emitter writes itself belongs to this node; statements
   // spliced in from chainFrom keep the tag of the node that produced them.
+  // Each emit first flushes the named-variable assignments its own input
+  // expressions just produced (they must land above the statement reading
+  // them), then — once — a comment naming this node.
+  let named = false;
   const emit = (...texts: string[]): void => {
+    out.push(...flushPending(ctx));
+    if (!named) {
+      named = true;
+      out.push(...tag([p.comment(nodeComment(node))], node.id));
+    }
     out.push(...tag(texts, node.id));
   };
   const own = (texts: string[]) => tag(texts, node.id);
-  const body = (port: string): CodeLine[] => {
-    const b = chainFrom(ctx, node, port, seen);
-    return b.length ? b : own([p.emptyBody]);
-  };
+  // Nested blocks get their own naming scope so a variable assigned in one
+  // branch is never referenced from outside it.
+  const body = (port: string): CodeLine[] =>
+    scoped(ctx, () => {
+      const b = chainFrom(ctx, node, port, seen);
+      return b.length ? b : own([p.emptyBody]);
+    });
 
   switch (node.type) {
     case "delayNode":
@@ -107,8 +120,10 @@ export function stepInto(ctx: EmitCtx, node: GraphNode, inPort: string, seen: Se
     }
     case "whileLoopNode": {
       const iter = stateVar(ctx, node, "iteration");
-      // 1000-iteration cap mirrors the runtime's safety cap.
-      emit(p.whileLine(p.and(conditionExpr(ctx, node), `${iter} < 1000`)));
+      // 1000-iteration cap mirrors the runtime's safety cap. The condition is
+      // kept inline: a hoisted variable would be evaluated once and the loop
+      // would never end.
+      emit(p.whileLine(p.and(withoutMaterialization(ctx, () => conditionExpr(ctx, node)), `${iter} < 1000`)));
       out.push(...indentLines([...body("loopBody"), ...own([p.assign(iter, `${iter} + 1`)])], unit));
       if (p.blockClose) emit(p.blockClose);
       out.push(...chainFrom(ctx, node, "done", seen));
@@ -212,7 +227,8 @@ export function stepInto(ctx: EmitCtx, node: GraphNode, inPort: string, seen: Se
       break;
     }
     default:
-      emit(p.comment(`${node.data.label}: trigger port "${inPort}" has no code mapping`));
+      // Already names the node, so it bypasses emit's automatic label comment.
+      out.push(...tag([p.comment(`${node.data.label}: trigger port "${inPort}" has no code mapping`)], node.id));
       break;
   }
   return out;

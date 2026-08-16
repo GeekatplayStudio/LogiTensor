@@ -2,12 +2,16 @@ import type { GraphNode, LanguageProfile } from "./types";
 import { GraphView, NameAllocator } from "./graph";
 import { literal } from "./profiles";
 import { extraOutputExpr } from "./expressions-extra";
+import type { MaterializeCtx } from "./materialize";
+import { materializeOutput } from "./materialize";
 
 // Emits the expression for one data output port, recursing through upstream
 // wires (ash-mesh expression-threading). Stateful nodes don't recurse — their
 // outputs read the state variable that the chain walker (chains.ts) mutates.
+// Non-trivial data outputs are then bound to a named variable (materialize.ts)
+// so every node owns at least one emitted, attributable line.
 
-export interface EmitCtx {
+export interface EmitCtx extends MaterializeCtx {
   graph: GraphView;
   profile: LanguageProfile;
   names: NameAllocator;
@@ -41,16 +45,23 @@ function substituteFormula(expr: string, vars: Record<string, string>): string {
 
 export function outputExpr(ctx: EmitCtx, node: GraphNode, portId: string): string {
   const key = `${node.id}:${portId}`;
+  // Already named in this scope: reference it. This is what makes a shared
+  // producer emit once — and it fixes a real bug, since inlining a Random
+  // Number twice used to draw two different numbers.
+  const named = ctx.materialized.get(key);
+  if (named) return named;
   if (ctx.visiting.has(key)) {
     ctx.warnings.push(`Cycle detected through ${node.data.label} — emitted as null.`);
     return ctx.profile.nil;
   }
   ctx.visiting.add(key);
+  let expr: string;
   try {
-    return computeOutputExpr(ctx, node, portId);
+    expr = computeOutputExpr(ctx, node, portId);
   } finally {
     ctx.visiting.delete(key);
   }
+  return materializeOutput(ctx, node, portId, expr);
 }
 
 // Mirrors computeNodeOutputs in src/lib/execution-helpers.ts node-for-node —
