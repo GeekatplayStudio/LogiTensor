@@ -42,7 +42,8 @@ export default function Sidebar() {
   });
 
   return (
-    <aside className="w-72 bg-zinc-950 border-r border-zinc-900 flex flex-col h-full z-10 select-none">
+    // Width is owned by the resizable Panel wrapping this sidebar (page.tsx)
+    <aside className="w-full bg-zinc-950 border-r border-zinc-900 flex flex-col h-full z-10 select-none">
       {/* Sidebar Header */}
       <div className="p-4 border-b border-zinc-900 flex flex-col gap-1">
         <span className="font-extrabold text-sm uppercase tracking-wider text-zinc-100">

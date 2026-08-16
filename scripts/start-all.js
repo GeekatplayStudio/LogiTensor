@@ -1,7 +1,50 @@
 const { spawn } = require("child_process");
+const fs = require("fs");
 const path = require("path");
 
 const isDev = process.argv.includes("--dev");
+const RUN_FILE = path.join(__dirname, ".run.json");
+
+function writeRunFile(backend, frontend) {
+  fs.writeFileSync(
+    RUN_FILE,
+    JSON.stringify(
+      {
+        backend: { pid: backend.process.pid, port: backend.port },
+        frontend: { pid: frontend.process.pid, port: frontend.port },
+      },
+      null,
+      2
+    )
+  );
+}
+
+function removeRunFile() {
+  try {
+    fs.unlinkSync(RUN_FILE);
+  } catch (e) {
+    // Already gone.
+  }
+}
+
+// spawn() with shell:true wraps the real server in a shell (and, on Windows,
+// npx.cmd chains a cmd.exe wrapper too), so proc.kill() only kills that
+// wrapper and leaves the actual server running. Kill the whole process tree.
+function killTree(pid) {
+  if (process.platform === "win32") {
+    spawn("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore", shell: true });
+  } else {
+    try {
+      process.kill(-pid, "SIGTERM");
+    } catch (e) {
+      try {
+        process.kill(pid, "SIGTERM");
+      } catch (e2) {
+        // Already gone.
+      }
+    }
+  }
+}
 
 // Starts the FastAPI backend, retrying on the next port up whenever the
 // chosen one is actually taken. We don't pre-probe the port with a throwaway
@@ -28,6 +71,7 @@ function startBackend(startPort, maxAttempts = 20) {
         cwd: path.join(__dirname, ".."),
         stdio: "pipe",
         shell: true,
+        detached: process.platform !== "win32",
       });
 
       let settled = false;
@@ -92,6 +136,7 @@ function startFrontend(startPort, backendPort, maxAttempts = 20) {
         cwd: path.join(__dirname, ".."),
         stdio: "pipe",
         shell: true,
+        detached: process.platform !== "win32",
         env: {
           ...process.env,
           NEXT_PUBLIC_API_URL: `http://localhost:${backendPort}`,
@@ -143,13 +188,17 @@ async function main() {
   const backend = await startBackend(8000);
   const frontend = await startFrontend(3000, backend.port);
 
+  writeRunFile(backend, frontend);
+  console.log(`(Run 'npm run stop' from another terminal to shut this stack down.)\n`);
+
   // Graceful shutdown helper
   const cleanUp = () => {
     console.log("\nShutting down LogiTensor stack...");
-    backend.process.kill();
+    killTree(backend.process.pid);
     console.log("✓ Backend server terminated.");
-    frontend.process.kill();
+    killTree(frontend.process.pid);
     console.log("✓ Frontend server terminated.");
+    removeRunFile();
     process.exit(0);
   };
 
@@ -164,5 +213,6 @@ async function main() {
 
 main().catch((err) => {
   console.error("✗ Failed to start LogiTensor stack:", err);
+  removeRunFile();
   process.exit(1);
 });

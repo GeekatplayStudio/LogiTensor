@@ -1,8 +1,9 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Any, Dict
 from backend.execution_engine import compile_and_run_graph
+from backend.nl_builder import build_graph_from_prompt
 
 app = FastAPI(title="LogiTensor LangGraph Backend")
 
@@ -45,6 +46,23 @@ async def run_graph(payload: WorkflowLayersRequest):
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+class NlBuildRequest(BaseModel):
+    prompt: str
+    # Compact node-type catalog sent by the frontend (single source of truth
+    # is NODE_DEFINITIONS in TypeScript — the backend never duplicates it).
+    # Aliased because "schema" shadows a BaseModel attribute in pydantic.
+    schema_: List[Dict[str, Any]] = Field(default=[], alias="schema")
+    model: str = "llama3"
+
+
+@app.post("/nl-build")
+async def nl_build(payload: NlBuildRequest):
+    try:
+        return await build_graph_from_prompt(payload.prompt, payload.schema_, payload.model)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/")
 def read_root():

@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import RangeNodeConfig from "./range-node-config";
 
 // Per-node-type config editors shown in a node's body. Split out of
 // custom-nodes.tsx to keep that file under the repo's module size guardrail.
@@ -199,6 +200,19 @@ export default function NodeConfigPanel({
           <span className="text-[10px] text-zinc-400 font-medium">Current Count</span>
           <span className="font-mono text-xs font-bold text-purple-400">
             {data.config?.count ?? 0}
+          </span>
+        </div>
+      )}
+
+      {type === "rangeNode" && (
+        <RangeNodeConfig data={data} onConfigChange={onConfigChange} />
+      )}
+
+      {type === "assertNode" && (
+        <div className="flex items-center justify-between py-1 bg-zinc-950/40 px-2 rounded border border-zinc-900/60">
+          <span className="text-[10px] text-zinc-400 font-medium">Verdict</span>
+          <span className={`font-mono text-xs font-bold ${data.outputs?.find((o: any) => o.id === "pass")?.value ? "text-emerald-400" : "text-red-400"}`}>
+            {data.outputs?.find((o: any) => o.id === "pass")?.value ? "PASS" : "FAIL"}
           </span>
         </div>
       )}

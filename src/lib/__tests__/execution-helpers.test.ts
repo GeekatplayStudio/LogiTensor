@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeNodeOutputs, resolveConditionFlag } from "../execution-helpers";
+import { computeNodeOutputs, handleTriggerOperation, resolveConditionFlag } from "../execution-helpers";
 
 describe("Formula node (mathNode)", () => {
   it("computes arithmetic over lettered inputs", () => {
@@ -115,6 +115,68 @@ describe("Loop nodes (passive outputs)", () => {
   it("exposes the current index/iteration from config", () => {
     expect(computeNodeOutputs("forLoopNode", {}, { index: 4 }).index).toBe(4);
     expect(computeNodeOutputs("whileLoopNode", {}, { iteration: 7 }).iteration).toBe(7);
+  });
+});
+
+describe("Range node (rangeNode)", () => {
+  it("flags below when value is under min", () => {
+    const out = computeNodeOutputs("rangeNode", { value: -5 }, { min: 0, max: 10 });
+    expect(out.below).toBe(true);
+    expect(out.above).toBe(false);
+    expect(out.inRange).toBe(false);
+  });
+
+  it("flags above when value is over max", () => {
+    const out = computeNodeOutputs("rangeNode", { value: 15 }, { min: 0, max: 10 });
+    expect(out.above).toBe(true);
+    expect(out.below).toBe(false);
+    expect(out.inRange).toBe(false);
+  });
+
+  it("flags inRange when value falls between min and max", () => {
+    const out = computeNodeOutputs("rangeNode", { value: 5 }, { min: 0, max: 10 });
+    expect(out.inRange).toBe(true);
+    expect(out.above).toBe(false);
+    expect(out.below).toBe(false);
+  });
+
+  it("increments the counter on Check when in range", async () => {
+    const { updatedConfig } = await handleTriggerOperation(
+      "rangeNode",
+      { value: 5 },
+      { min: 0, max: 10, initialCount: 0, count: 3 },
+      "checkTrigger"
+    );
+    expect(updatedConfig?.count).toBe(4);
+  });
+
+  it("decrements the counter on Check when out of range", async () => {
+    const { updatedConfig } = await handleTriggerOperation(
+      "rangeNode",
+      { value: 15 },
+      { min: 0, max: 10, initialCount: 0, count: 3 },
+      "checkTrigger"
+    );
+    expect(updatedConfig?.count).toBe(2);
+  });
+
+  it("resets the counter to initialCount on Reset", async () => {
+    const { updatedConfig } = await handleTriggerOperation(
+      "rangeNode",
+      { value: 5 },
+      { min: 0, max: 10, initialCount: 7, count: 99 },
+      "resetTrigger"
+    );
+    expect(updatedConfig?.count).toBe(7);
+  });
+});
+
+describe("Expected Value node (assertNode)", () => {
+  it("passes on equal values with numeric coercion, fails otherwise", () => {
+    expect(computeNodeOutputs("assertNode", { value: 5, expected: 5 }, {}).pass).toBe(true);
+    expect(computeNodeOutputs("assertNode", { value: 5, expected: "5" }, {}).pass).toBe(true);
+    expect(computeNodeOutputs("assertNode", { value: true, expected: true }, {}).pass).toBe(true);
+    expect(computeNodeOutputs("assertNode", { value: 5, expected: 6 }, {}).pass).toBe(false);
   });
 });
 

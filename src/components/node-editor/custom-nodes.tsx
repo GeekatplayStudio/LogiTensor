@@ -25,13 +25,13 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
   let category: "Inputs" | "Logic" | "Control Flow" | "Math & Compare" | "Data & Text" | "Outputs" | "AI & Scripts" | "Neural Network" | "AI Model" = "Logic";
   if (["triggerInput", "constNum", "constBool", "constString"].includes(type || "")) {
     category = "Inputs";
-  } else if (["ifElseTrigger", "condValue", "delayNode", "counterNode", "forLoopNode", "whileLoopNode"].includes(type || "")) {
+  } else if (["ifElseTrigger", "condValue", "delayNode", "counterNode", "forLoopNode", "whileLoopNode", "rangeNode"].includes(type || "")) {
     category = "Control Flow";
   } else if (["compareNode", "expressionNode", "mathNode", "mathFunctionNode", "randomNode"].includes(type || "")) {
     category = "Math & Compare";
   } else if (["filterNode", "stringOpNode", "replaceTextNode"].includes(type || "")) {
     category = "Data & Text";
-  } else if (["loggerNode", "textOutputNode"].includes(type || "")) {
+  } else if (["loggerNode", "textOutputNode", "assertNode"].includes(type || "")) {
     category = "Outputs";
   } else if (["pythonScript", "ollamaLLM", "ollamaVLM"].includes(type || "")) {
     category = "AI & Scripts";
@@ -456,9 +456,11 @@ export const nodeTypes = {
   condValue: CustomNode,
   delayNode: CustomNode,
   counterNode: CustomNode,
+  rangeNode: CustomNode,
   compareNode: CustomNode,
   expressionNode: CustomNode,
   loggerNode: CustomNode,
+  assertNode: CustomNode,
   pythonScript: CustomNode,
   ollamaLLM: CustomNode,
   ollamaVLM: CustomNode,

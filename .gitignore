@@ -47,3 +47,6 @@ backend/.venv/
 
 # local dev-tool config (per-machine)
 /.claude/
+
+# LogiTensor dev stack runtime state (pids/ports of npm run dev/start)
+/scripts/.run.json

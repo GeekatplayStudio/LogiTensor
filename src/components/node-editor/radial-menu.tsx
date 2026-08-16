@@ -18,8 +18,10 @@ export default function RadialMenu({ x, y, onClose, isOpen }: RadialMenuProps) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Group definitions
-  const categories = ["Inputs", "Logic", "Control Flow", "Math & Compare", "Data & Text", "Outputs", "AI & Scripts", "Neural Network", "AI Model"];
+  // Derived from the definitions registry (in first-appearance order) so a
+  // new category shows up here automatically instead of needing a second,
+  // drift-prone hardcoded list.
+  const categories = [...new Set(Object.values(NODE_DEFINITIONS).map((d) => d.category))];
 
   const categoryIcons: Record<string, React.ReactNode> = {
     Inputs: <Layers size={14} />,
@@ -106,6 +108,16 @@ export default function RadialMenu({ x, y, onClose, isOpen }: RadialMenuProps) {
     ? Object.values(NODE_DEFINITIONS).filter((d) => d.category === selectedCategory)
     : [];
 
+  // Outer ring grows with item count so node pills stop overlapping in the
+  // larger categories (135px fit ~7 pills; beyond that, spread out).
+  const outerRadius = Math.max(135, filteredNodes.length * 20);
+
+  // Clamp the anchor so both rings stay on-screen when invoked near an edge
+  // (raw client coords previously let half the menu render off-viewport).
+  const margin = outerRadius + 70; // pill width headroom
+  const cx = typeof window !== "undefined" ? Math.min(Math.max(x, margin), window.innerWidth - margin) : x;
+  const cy = typeof window !== "undefined" ? Math.min(Math.max(y, margin), window.innerHeight - margin) : y;
+
   const handleNodeClick = (type: string) => {
     // Convert click coordinates to Flow space
     const flowPosition = screenToFlowPosition({ x, y });
@@ -124,7 +136,7 @@ export default function RadialMenu({ x, y, onClose, isOpen }: RadialMenuProps) {
       {/* Radial Menu Container */}
       <div
         ref={menuRef}
-        style={{ left: x, top: y }}
+        style={{ left: cx, top: cy }}
         className="absolute w-0 h-0 flex items-center justify-center pointer-events-auto select-none"
       >
         <AnimatePresence>
@@ -184,9 +196,8 @@ export default function RadialMenu({ x, y, onClose, isOpen }: RadialMenuProps) {
                 const total = filteredNodes.length;
                 // Position them in a clean arc or full circle
                 const angle = (idx / total) * 2 * Math.PI - Math.PI / 2;
-                const radius = 135;
-                const subX = Math.cos(angle) * radius;
-                const subY = Math.sin(angle) * radius;
+                const subX = Math.cos(angle) * outerRadius;
+                const subY = Math.sin(angle) * outerRadius;
                 const colors = categoryColors[selectedCategory] || {
                   bg: "bg-zinc-950",
                   text: "text-zinc-400",

@@ -135,10 +135,10 @@ function FlowCanvas() {
           style={{ background: "#09090b", border: "1px solid #27272a" }}
           nodeColor={(n) => {
             if (["triggerInput", "constNum", "constBool", "constString"].includes(n.type || "")) return MUTED_COLORS.blue;
-            if (["ifElseTrigger", "condValue", "delayNode", "counterNode", "forLoopNode", "whileLoopNode"].includes(n.type || "")) return MUTED_COLORS.purple;
+            if (["ifElseTrigger", "condValue", "delayNode", "counterNode", "forLoopNode", "whileLoopNode", "rangeNode"].includes(n.type || "")) return MUTED_COLORS.purple;
             if (["compareNode", "expressionNode", "mathNode", "mathFunctionNode", "randomNode"].includes(n.type || "")) return MUTED_COLORS.amber;
             if (["filterNode", "stringOpNode", "replaceTextNode"].includes(n.type || "")) return MUTED_COLORS.emerald;
-            if (["loggerNode", "textOutputNode"].includes(n.type || "")) return MUTED_COLORS.rose;
+            if (["loggerNode", "textOutputNode", "assertNode"].includes(n.type || "")) return MUTED_COLORS.rose;
             if (["thresholdNeuron", "maxSelectorNode", "synapseNode", "leakyIntegrateFire"].includes(n.type || "")) return MUTED_COLORS.indigo;
             if (["imageInputGrid", "denseLayer", "conv1dLayer", "outputLayerNode"].includes(n.type || "")) return MUTED_COLORS.cyan;
             return MUTED_COLORS.teal;

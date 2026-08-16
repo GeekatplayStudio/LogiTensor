@@ -4,6 +4,37 @@
 
 Branded and developed by **Geekatplay Studio**.
 
+```mermaid
+flowchart LR
+    classDef core fill:#f59e0b,stroke:#b45309,color:#111827,font-weight:bold
+    classDef dim fill:#06b6d4,stroke:#0e7490,color:#0f172a,font-weight:bold
+    classDef exec fill:#10b981,stroke:#047857,color:#0f172a,font-weight:bold
+    classDef new fill:#a78bfa,stroke:#6d28d9,color:#1e1b2e,font-weight:bold
+
+    Canvas["🧩 Node Canvas<br/>drag · wire · run"]:::core
+
+    subgraph Dimensions["Multi-Dimensional Workspaces"]
+        Layers["🧊 Dimension Stack<br/>parallel layers, live 3D orbit"]:::dim
+        Hubs["🌐 Federation<br/>hubs of hubs, linked endpoints"]:::dim
+    end
+
+    subgraph Engines["Dual Execution Engines"]
+        TS["⚡ TypeScript<br/>instant live preview"]:::exec
+        Py["🐍 Python / LangGraph<br/>real execution + Ollama"]:::exec
+    end
+
+    subgraph NewSurfaces["Build & Verify Faster"]
+        NL["💬 Natural-Language Builder<br/>describe it, Ollama wires it"]:::new
+        Code["📄 Live Code Panel<br/>8 languages, one graph"]:::new
+        Tests["✅ Visual Run-Through Tests<br/>Expected Value + step-through"]:::new
+        ThreeD["🎥 three.js Flow Preview<br/>orbit the running graph"]:::new
+    end
+
+    Canvas --> Dimensions
+    Canvas --> Engines
+    Canvas --> NewSurfaces
+```
+
 ---
 
 ## Executive Summary
@@ -12,7 +43,7 @@ LogiTensor is a visual, node-based programming environment: logic gates, control
 
 It was built as both a working tool — for prototyping automations and for teaching computational thinking and basic neural-network mechanics visually — and as a demonstration project: a non-trivial full-stack system with a real architectural spine (dual execution engines, a custom 3D rendering layer, a sandboxed scripting surface) rather than a CRUD app with a chatbot bolted on.
 
-It's technically interesting for three reasons: it runs **two independent, cross-language execution engines** (TypeScript for instant in-browser preview, Python/LangGraph for actual execution) that must agree bit-for-bit, including on pseudo-random neural-network weights; it renders three distinct **3D scenes with no WebGL/three.js dependency**, using hand-written camera and perspective-projection math; and it sandboxes **user-authored Python** well enough to run arbitrary "script" nodes safely in a local single-user context.
+It's technically interesting for a few reasons: it runs **two independent, cross-language execution engines** (TypeScript for instant in-browser preview, Python/LangGraph for actual execution) that must agree bit-for-bit, including on pseudo-random neural-network weights, and are now checked by an automated parity test suite; it renders most of its 3D through hand-written camera/perspective-projection math with **no WebGL dependency**, and adds a genuine `three.js`/`@react-three/fiber` scene only where an orbitable live preview of the running graph earns the extra dependency; it sandboxes **user-authored Python** well enough to run arbitrary "script" nodes safely in a local single-user context; and the same graph the canvas renders is also the input to a **pure, testable code-generation engine** (eight target languages) and to a **local-LLM natural-language flow builder** — both built as thin, validated layers over the existing node/edge model rather than new sources of truth.
 
 ## Engineering Challenge
 
@@ -27,43 +58,44 @@ The project's hard problems weren't UI polish — React Flow, Zustand, and Tailw
 ## Architecture Overview
 
 ```
-┌─────────────────────────────── Browser ───────────────────────────────┐
-│  Next.js 16 / React 19  (single-page canvas app)                       │
-│                                                                          │
-│  ┌────────────┐   ┌──────────────────────────┐   ┌──────────────────┐ │
-│  │  Sidebar /  │   │   React Flow canvas       │   │  3D views (SVG /  │ │
-│  │  node       │──▶│   (@xyflow/react)         │──▶│  Canvas2D):        │ │
-│  │  palette    │   │   nodes + edges           │   │  dimension stack,  │ │
-│  └────────────┘   └────────────┬─────────────┘   │  federation,        │ │
-│                                  │                  │  AI Model 3D web   │ │
-│                        ┌─────────▼─────────┐        └──────────────────┘ │
-│                        │  Zustand store     │                            │
-│                        │  (single source of │  ── on every edit ──▶      │
-│                        │  truth: nodes,     │     execution-helpers.ts   │
-│                        │  edges, layers,    │     (pure TS re-impl. of   │
-│                        │  hubs)             │     every node's logic —   │
-│                        └─────────┬─────────┘     instant live preview)  │
-└──────────────────────────────────┼──────────────────────────────────────┘
-                                    │  POST full graph on "Run Flow"
-                                    ▼
-┌────────────────────────────── Backend ─────────────────────────────────┐
-│  FastAPI (backend/main.py)                                              │
-│         │                                                               │
-│         ▼                                                               │
-│  compile_and_run_graph()  →  LangGraph StateGraph                       │
-│    - trigger wiring → graph edges                                       │
-│    - If/Else, loops → conditional edges                                 │
-│    - node logic → execution_engine.py (parallel re-implementation of    │
-│      the same node semantics as execution-helpers.ts, verified          │
-│      bit-for-bit on shared math like the PRNG)                          │
-│         │                                                               │
-│         ▼                                                               │
-│  real I/O: sandboxed Python Script nodes, Ollama LLM/VLM calls           │
-│         │                                                               │
-│         └── logs + node outputs streamed back → painted onto canvas ────┘
+┌─────────────────────────────────── Browser ────────────────────────────────────┐
+│  Next.js 16 / React 19  —  resizable [palette | canvas | code] shell            │
+│                                                                                    │
+│  ┌────────────┐  ┌──────────────────┐  ┌──────────────┐  ┌───────────────────┐ │
+│  │  Sidebar /  │  │  React Flow       │  │  3D views     │  │  Code Panel        │ │
+│  │  node       │─▶│  canvas           │─▶│  (SVG/Canvas2D│  │  (src/lib/codegen) │ │
+│  │  palette    │  │  (@xyflow/react)  │  │  + three.js   │  │  8-language live   │ │
+│  └────────────┘  │  nodes + edges     │  │  Flow Preview)│  │  source generation │ │
+│  ┌────────────┐  └────────┬──────────┘  └──────────────┘  └───────────────────┘ │
+│  │  NL Input   │           │                                                     │
+│  │  Bar (Ollama)──────────▶│                                                     │
+│  └────────────┘  ┌────────▼──────────┐                                          │
+│                    │  Zustand store    │                                         │
+│                    │  (slices: graph,  │  ── on every edit ──▶                   │
+│                    │  layers, hubs,    │     execution-helpers.ts                │
+│                    │  execution)       │     (pure TS re-impl. of                │
+│                    └────────┬──────────┘     every node's logic —                │
+└─────────────────────────────┼──────────────────  instant live preview) ──────────┘
+                               │  POST full graph on "Run Flow"
+                               ▼
+┌────────────────────────────────── Backend ──────────────────────────────────────┐
+│  FastAPI (backend/main.py)         POST /nl-build → backend/nl_builder.py       │
+│         │                          (Ollama, schema derived from NODE_DEFINITIONS)│
+│         ▼                                                                        │
+│  compile_and_run_graph()  →  LangGraph StateGraph      (backend/engine/ package: │
+│    - trigger wiring → graph edges                       state · helpers · nn_math│
+│    - If/Else, loops → conditional edges                 · passive · active ·     │
+│    - node logic → execute_logic_computation() /          compile — mirrors        │
+│      run_node_task() (parity-tested against              execution-helpers.ts,    │
+│      execution-helpers.ts via pytest, backend/tests/)     one file per concern)   │
+│         │                                                                        │
+│         ▼                                                                        │
+│  real I/O: sandboxed Python Script nodes, Ollama LLM/VLM calls                   │
+│         │                                                                        │
+│         └── logs + node outputs streamed back → painted onto canvas ─────────────┘
 ```
 
-**Data flow, concretely:** editing a node in the browser mutates the Zustand store, which triggers `evaluateNode()` — a spreadsheet-style incremental recalculation that re-evaluates just the changed node and walks its downstream edges, using the pure-TypeScript node implementations in `execution-helpers.ts`. Nothing touches the network until the user clicks **Run Flow**, at which point the *entire* graph (all layers) is serialized to JSON and POSTed to FastAPI, which compiles it into a LangGraph `StateGraph` and actually executes it — including anything the browser can't do safely or at all (running arbitrary Python, calling a local Ollama model). Results and log lines stream back and are written onto the same node objects the canvas already renders, so the live-preview and "real run" states share one visual language.
+**Data flow, concretely:** editing a node in the browser mutates the Zustand store, which triggers `evaluateNode()` — a spreadsheet-style incremental recalculation that re-evaluates just the changed node and walks its downstream edges, using the pure-TypeScript node implementations in `execution-helpers.ts`. The same store powers a pure `generateCode(nodes, edges, target)` function (`src/lib/codegen/`) that reads the live graph and emits real source in eight languages, and a `materializeNlGraph()` validator that turns an Ollama-proposed graph (from the natural-language input bar) into real nodes/edges — never trusting the model's output past a schema check. Nothing touches the network for the *canvas* until the user clicks **Run Flow**, at which point the entire graph (all layers) is serialized to JSON and POSTed to FastAPI, which compiles it into a LangGraph `StateGraph` and actually executes it — including anything the browser can't do safely or at all (running arbitrary Python, calling a local Ollama model). Results and log lines stream back and are written onto the same node objects the canvas already renders, so the live-preview and "real run" states share one visual language.
 
 ## Technology Choices
 
@@ -78,7 +110,7 @@ Technology was picked to fit the problem, not to look impressive on a list — h
 
 ## Key Engineering Decisions
 
-- **Dual execution engines as a deliberate design, not technical debt.** Every node type is implemented twice — once in `execution-helpers.ts` for instant preview, once in `execution_engine.py` for real execution — with an explicit code-comment contract ("change one, you must change both") rather than a shared runtime abstraction (e.g. transpiling one to the other, or a WASM bridge). The two engines have fundamentally different jobs — synchronous UI feedback vs. real external I/O — and at this project's size (~30 node types), plain duplication is more inspectable and debuggable than an abstraction layer would be.
+- **Dual execution engines as a deliberate design, not technical debt.** Every node type is implemented twice — once in `execution-helpers.ts` for instant preview, once in `backend/engine/passive.py`/`active.py` for real execution — with an explicit code-comment contract ("change one, you must change both") rather than a shared runtime abstraction (e.g. transpiling one to the other, or a WASM bridge). The two engines have fundamentally different jobs — synchronous UI feedback vs. real external I/O — and at this project's size (~46 node types), plain duplication is more inspectable and debuggable than an abstraction layer would be; a parity test suite (`backend/tests/`) now guards the two from silently drifting apart.
 - **The graph *is* the serialization format.** Nodes and edges are plain React-Flow-shaped objects, not a custom normalized schema, so the entire workflow round-trips to JSON for save/load and for the backend's request body with zero translation layer.
 - **The "Enabled" bypass is table-driven, not a generic flag.** Rather than a universal "skip this node" boolean, each bypassable node type declares its own `(primaryInput, primaryOutput)` pair in a lookup table, mirrored on both engines — because "doing nothing" means something different per node (a Filter's identity is its `value` port, not its `search` port), and an explicit table keeps that mapping auditable in one place instead of buried in conditionals.
 - **Sparse connectivity reuses the dense rendering path.** A Conv1D Layer's local receptive-field connectivity is expressed as an ordinary dense weight matrix that happens to be mostly zero, rather than a second sparse code path through the rendering/3D pipeline — trading some wasted memory for reusing already-correct, already-tested rendering code.
@@ -86,8 +118,8 @@ Technology was picked to fit the problem, not to look impressive on a list — h
 
 ## Tradeoffs
 
-- **Dual-engine duplication** — *benefit:* engine independence and inspectability; each engine can be read start-to-finish without indirection. *Cost:* a bug can exist in one engine and not the other, currently guarded only by explicit contracts and ad hoc verification (like manually diffing PRNG output sequences), not an automated cross-engine test suite. Still the right call at this scale — see Lessons Learned for the gap this leaves.
-- **One large Zustand store** — *benefit:* simplicity, one obvious place to look for graph state. *Cost:* the store file is now well over 1,000 lines, in a codebase that otherwise enforces a hard 500-line-per-file guardrail — Zustand doesn't have a first-class multi-slice pattern that reads as cleanly as a single store for this domain, so the guardrail was knowingly broken in exactly one place.
+- **Dual-engine duplication** — *benefit:* engine independence and inspectability; each engine can be read start-to-finish without indirection. *Cost:* a bug can exist in one engine and not the other. This is now guarded by an automated parity suite (`backend/tests/test_passive_parity.py`) that runs every `execution-helpers.test.ts` case through the Python engine and asserts identical output — it caught a real divergence (string-concatenation coercion in the Formula node) the first time it ran. Still worth budgeting for: the suite covers passive/reactive node logic, not the trigger-driven side.
+- **Zustand store split into slices** — the store now composes five focused slices (`store/graph-slice.ts`, `layers-slice.ts`, `hubs-slice.ts`, `execution-slice.ts`, `persistence-slice.ts`) plus shared pure helpers, each under the repo's 500-line guardrail — closing what was previously the one deliberate exception to that rule. *Cost:* cross-slice calls go through `get()`/`set()` rather than direct references, which is Zustand's normal multi-slice idiom but is one more layer of indirection than a single flat store.
 - **No WebGL/three.js** — *benefit:* smaller bundle, one rendering mental model across the whole app. *Cost:* a real ceiling on scene complexity — the AI Model 3D viewer already needed connection-sampling and alpha-scaling heuristics to stay legible past a few thousand simultaneous lines. Acceptable because these visualizations are meant to be intelligible at a glance, not photorealistic scenes with tens of thousands of objects.
 - **No database or persistence backend** — *benefit:* the simplest possible reliability story; nothing to run, nothing to fall out of sync. *Cost:* no multi-user collaboration, no versioning, no auth — workflows live in browser memory plus manual JSON export/import. Deliberately out of scope: the project set out to demonstrate visual programming and execution semantics, not to be a SaaS platform.
 - **AST-allowlist sandboxing instead of real process isolation** — *benefit:* zero infrastructure dependency, fast to implement and reason about. *Cost:* it's a blocklist-style boundary (deny known-dangerous modules/builtins/dunders), not true isolation. Acceptable for a local, single-user dev tool; explicitly **not** safe for multi-tenant or publicly exposed deployment as-is, and documented as such rather than glossed over.
@@ -104,14 +136,14 @@ Technology was picked to fit the problem, not to look impressive on a list — h
 - **Live evaluation is incremental, not a full-graph recompute.** Editing one node's value re-evaluates only that node and walks its downstream edges — spreadsheet-style dependency recalculation — so canvas responsiveness scales with the size of the *affected* subgraph, not the total graph.
 - **3D rendering degrades on purpose, not by accident.** The AI Model weight viewer moved from SVG (one DOM node per line, chokes past a few hundred connections) to Canvas2D specifically to handle real graphs — verified live at 8,192 simultaneous connections — and caps rendering at 40,000 connections per hop with sampling beyond that: a deliberate, documented ceiling instead of a renderer that degrades unpredictably.
 - **The backend is stateless per request.** The whole graph is sent and recompiled into a LangGraph on every "Run Flow" — simplest possible correctness story, but graph-compilation cost is `O(nodes + edges)` with no caching between runs, a known ceiling if workflows grow very large or run in tight loops.
-- **A standing 500-line-per-file guardrail** (enforced in `AGENTS.md`) keeps the codebase navigable as node types multiply — new node categories consistently get their own body/execution files (e.g. `ai-model-node-parts.tsx`, `dense-layer-3d-view.tsx`) instead of growing the already-large canvas/renderer files further, with one acknowledged, deliberate exception: the Zustand store (see Tradeoffs).
+- **A standing 500-line-per-file guardrail** (enforced in `AGENTS.md`) keeps the codebase navigable as node types multiply — new node categories consistently get their own body/execution files (e.g. `ai-model-parts/`, `dense-layer-3d-view.tsx`), and the two largest files that once broke this rule (the Zustand store, the Python execution engine) are now split into cooperating modules that all individually satisfy it (see Tradeoffs).
 
 ## Lessons Learned
 
-- **What worked well:** keeping each concern — node type definitions, execution logic, UI config panels — in one predictable file per concern (rather than one file per node type) made adding new node types fast and low-risk. Several new node types (Threshold Neuron, LIF Neuron, Conv1D Layer) landed in single focused sessions by following the established pattern, without touching unrelated code.
-- **What would be redesigned today:** the central Zustand store would be split into cooperating slices (canvas/graph state, layers/hubs, execution) from day one, instead of growing organically past the project's own 500-line guardrail. It's the clearest maintainability debt in the codebase today.
-- **The biggest reliability gap:** dual-engine duplication should have shipped with a shared "golden test" harness from the start — run every node type through both engines with fixed inputs and assert identical outputs — instead of relying on manual spot-checks (like the ad hoc PRNG sequence comparison performed during development). This is the highest-leverage improvement not yet made.
-- **Future improvements:** real sandboxing (subprocess isolation or WASM) for user-authored Python before any multi-user or hosted deployment; a persistence layer if collaboration or workflow history becomes a goal; and a shared, declarative node-schema that generates both engines' dispatch logic from one source, closing the duplication gap without abandoning the "engines are allowed to diverge in responsibility" design that makes the split worthwhile in the first place.
+- **What worked well:** keeping each concern — node type definitions, execution logic, UI config panels — in one predictable file per concern (rather than one file per node type) made adding new node types fast and low-risk. Several new node types (Threshold Neuron, LIF Neuron, Conv1D Layer, Range, Expected Value) landed in single focused sessions by following the established pattern, without touching unrelated code. The same held true for the Zustand store and Python engine splits — each collapsed cleanly into cooperating modules (slices, `backend/engine/`) once the split was actually done, confirming the "should have shipped this way" instinct below.
+- **What was redesigned:** the central Zustand store is now split into cooperating slices (graph, layers, hubs, execution, persistence) instead of one 1,600-line file, and `backend/execution_engine.py` into a `backend/engine/` package (`state`, `helpers`, `nn_math`, `passive`, `active`, `compile`) behind a compatibility shim so nothing importing the old path broke.
+- **The reliability gap that's now closed:** dual-engine duplication now has a shared parity harness (`backend/tests/`) — every passive/reactive node case from the TypeScript suite runs through the Python engine and asserts an identical result. It caught a real bug on its first run. The gap that remains: trigger-driven (stateful, side-effecting) node logic isn't covered the same way, since the Python engine deliberately treats that as frontend-owned state it reflects rather than recomputes.
+- **Future improvements:** real sandboxing (subprocess isolation or WASM) for user-authored Python before any multi-user or hosted deployment; a persistence layer if collaboration or workflow history becomes a goal; extending parity testing to the trigger-driven path; and widening the code-generation panel's native emitters (currently TypeScript/JavaScript and Python) to more languages as demand shows up, rather than leaning further on the line-adapter approach used for C/C++/Go/Rust/PHP today.
 
 ---
 
@@ -147,10 +179,11 @@ Technology was picked to fit the problem, not to look impressive on a list — h
 ### 5. Advanced Node Library
 - **Inputs**: Manual Trigger, Constants (Number, Boolean, String).
 - **Logic Gates**: AND, OR, NOT, XOR, NOR, NAND.
-- **Control Flow**: Delay, Increment/Decrement Counter, **If / Else Trigger** (its `Check` input evaluates `Condition` — type `true`/`false` or an expression like `a > b`, or wire in a boolean output — and routes to `If` or `Else`), Conditional Value (switches data value), **For Loop** (fires its Body trigger a fixed number of times with a live Index), **While Loop** (fires Body while its Condition stays true, re-checked every pass, with a 1000-iteration safety cap).
+- **Control Flow**: Delay, Increment/Decrement Counter, **Range** (checks whether a Value falls inside Min/Max — `Above`/`Below`/`In Range` outputs recompute live; its own `Count` increments/decrements on each `Check`), **If / Else Trigger** (its `Check` input evaluates `Condition` — type `true`/`false` or an expression like `a > b`, or wire in a boolean output — and routes to `If` or `Else`), Conditional Value (switches data value), **For Loop** (fires its Body trigger a fixed number of times with a live Index), **While Loop** (fires Body while its Condition stays true, re-checked every pass, with a 1000-iteration safety cap).
 - **Math & Compare**: Compare Values (`==`, `!=`, `<`, `<=`, `>`, `>=`), Safe Expression, **Formula** (free-form expressions over inputs that grow new lettered ports — a, b, c… — automatically as you wire them up; numbers compute, strings concatenate), **Math Function** (abs, round, floor, ceil, sqrt, pow, min, max, mod), Random Number.
 - **Data & Text**: **Filter** (passes a value through only if it includes/excludes a search term, case-sensitive optional), Text Transform (uppercase/lowercase/trim/length/reverse), Text Replace.
-- **Outputs**: Console Logger, Text Output (resizable display).
+- **Outputs**: Console Logger, Text Output (resizable display), **Expected Value** (compares Value to Expected and exposes a Pass boolean — the assertion node **Run Tests** fires and grades; see §9).
+- **Hybrid trigger ports**: any trigger input (Inc/Dec, Check, Log, Step, …) also accepts a wired boolean or number directly — `true`/positive numbers fire it, `false`/zero don't — so a Compare or Range node can drive execution flow without a separate pulse node in between. Fires once per rising edge (off→on), not on every re-evaluation.
 - **AI & Scripts**:
   - *Python Script*: Executes sandboxed scripts. Injects inputs `x` and `y` and retrieves `result`.
   - *Ollama LLM*: Queries local models (e.g. `llama3`) with prompt templates.
@@ -166,16 +199,39 @@ Technology was picked to fit the problem, not to look impressive on a list — h
   - *Output Layer*: Renders each incoming activation as a bar and outputs the index of the strongest neuron (the winner).
 - **Enabled bypass**: Most computation nodes (Logic gates, Math & Compare, Data & Text, Neural Network) carry an `Enabled` boolean input (default `true`). Set it false — directly or by wiring in a boolean — and the node skips its own logic, passing its primary input straight through to its primary output instead, as if it weren't in the graph.
 
-### 6. Canvas Editing
+### 6. Natural-Language Flow Builder
+- A slim input bar sits above the workspace: describe a flow in a sentence and **Build** sends it, along with a compact JSON schema of every node type (derived straight from `NODE_DEFINITIONS`, never hand-duplicated), to a local **Ollama** model via `POST /nl-build`.
+- The model's response is never trusted directly — `materializeNlGraph()` validates every proposed node type, port, and edge against the real node definitions, rejects or strips anything unrecognized (with a toast explaining what was dropped), and only then builds real nodes with real config defaults.
+- **Replace** or **Add** modes let a request start a fresh board or extend the current one; accepted graphs are auto-laid-out left-to-right by topological depth.
+
+### 7. Live Multi-Language Code Panel
+- A collapsible, resizable right-hand panel renders the current canvas graph as real source code, live, with a language dropdown: **TypeScript, JavaScript, Python, C, C++, Go, Rust, PHP**.
+- TypeScript/JavaScript and Python are **native emitters** — one small per-node-type contract (`setup`/`loop`/`outputs`) shared across ~46 node types, so trigger chains become real `if`/loop/function statements and data wiring becomes threaded expressions, not templated strings. C/C++/Go/Rust/PHP are **derived** from the JavaScript emission through a deterministic line-adapter (rule table + honest `TODO(port by hand)` bailouts for constructs that don't map cleanly) — the same approach Geekatplay Studio's ASH-Mesh Device Logic Studio uses, extended from its original 4-language, 2-native-emitter design.
+- Syntax highlighting via `shiki`; copy-to-clipboard; any node the generator couldn't fully compile surfaces as an in-panel warning instead of silently producing wrong code.
+
+### 8. Visual Run-Through Testing
+- **Run Tests** (flask icon) fires every Manual Trigger live on the canvas — the same animated, value-labeled execution path as normal interactive use — then grades every **Expected Value** node and reports a pass/fail summary.
+- **Live values on every wire**: data edges now show a value pill during interactive runs (previously only the backend's Run Flow did) — colors and labels are driven by one shared styling helper so the two execution paths look identical.
+- **Pause / Step**: pause the trigger flow mid-run and advance one hop at a time to watch exactly what fires and in what order.
+
+### 9. three.js Flow 3D Preview
+- An orbitable WebGL scene (`@react-three/fiber` + `drei`) renders the live graph as boxes and connecting lines you can drag to orbit — running nodes glow amber, errored nodes flush red, in real time as a flow executes. The app's first genuine three.js surface, added deliberately alongside — not in place of — the existing hand-rolled SVG/Canvas2D 3D views, which stay for the scenes they already handle well.
+
+### 10. Resizable, Collapsible Workspace
+- The palette, canvas, and code panel are three `react-resizable-panels` panes — drag any divider to resize, or drag past a panel's minimum to collapse it out of the way.
+- The header toolbar is icon-first with hover tooltips (Run, Run Tests, Pause/Step, Loops, Delay, Reset, Clear, Save/Load, 3D Preview, Help, About) to stay compact at any panel width.
+
+### 11. Canvas Editing
 - **Multi-select**: Ctrl/Cmd+click to add nodes to a selection (native React Flow behavior — also works with a drag-select rectangle).
 - **Copy / Paste**: Ctrl/Cmd+C copies the selected nodes plus any wiring entirely within the selection; Ctrl/Cmd+V pastes them offset from the originals, freshly wired, and selected.
 - **Delete**: Delete/Backspace removes the selected node(s) along with their connected edges (and any multi-dimensional clones), skipped while typing in a text field so it never hijacks normal editing.
+- **Radial node library**: right-click anywhere on the canvas for a two-level circular menu (categories, derived live from the node registry, then that category's nodes) — clamped to the viewport and sized to the category, so it never renders off-screen or crowds past the edge.
 
-### 7. Multi-Layer Sandbox Security
+### 12. Multi-Layer Sandbox Security
 - **Python AST Scanner**: Custom scripts are statically scanned using Python's Abstract Syntax Tree parser. Blocks dangerous modules (`os`, `sys`, `subprocess`, `requests`), builtins (`eval`, `exec`, `open`), and dunder properties.
 - **JS/Python Expression Sandbox**: Math and Formula nodes run a token-based Shunting-yard calculator, isolating execution threads from window/interpreter global spaces, mirrored identically on both the frontend and the backend.
 
-### 8. In-App Help & About
+### 13. In-App Help & About
 - A **Help** panel (top toolbar) walks through building flows, the node library, dimensions, the 3D stack, and federation.
 - An **About** panel carries the LogiTensor pitch and Geekatplay Studio background, plus a link back to this repository.
 
@@ -186,7 +242,7 @@ Technology was picked to fit the problem, not to look impressive on a list — h
 ### Prerequisites
 1. **Node.js** (v18+) & npm.
 2. **Python** (v3.10+) with `pip`.
-3. **Ollama** installed and running locally.
+3. **Ollama** installed and running locally — required for the Ollama LLM/VLM nodes *and* for the natural-language flow builder (`POST /nl-build`), which is unusable without it.
 
 ### Setup Stack
 Run our automatic bootstrapper to build the Python virtual environment and configure models:
@@ -204,11 +260,24 @@ Open [http://localhost:3000](http://localhost:3000) in your browser. The page fi
 If port 3000 or 8000 is already taken, the startup script automatically retries on the next port up (3001, 8001, …) and wires the frontend to whichever backend port actually started — no manual port-juggling required.
 
 ### Verification tests
-To verify front-end calculations and backend security scanners:
+To verify front-end calculations (including the codegen and hybrid-trigger suites):
 ```bash
 npm run test
 ```
-Also available: `npx tsc --noEmit` (TypeScript check) and `npm run lint` (ESLint).
+Also available: `npm run typecheck` (`tsc --noEmit`) and `npm run lint` (ESLint).
+
+To run the backend, including the TS↔Python **parity suite** that checks both execution engines agree node-for-node:
+```bash
+python -m pytest
+```
+
+A GitHub Actions workflow (`.github/workflows/ci.yml`) runs lint, typecheck, `npm test`, `npm run build`, and `pytest` on every push and pull request.
+
+---
+
+## Roadmap
+
+[`ROADMAP.md`](./ROADMAP.md) is the design record for the multi-language code panel, natural-language builder, visual run-through testing, three.js preview, and the module-size cleanup — grounded in a full audit of this repo (and of Geekatplay Studio's ASH-Mesh Device Logic Studio, the reference for the code-generation architecture). All phases in it are implemented.
 
 ---
 *Branded and developed by Geekatplay Studio.*

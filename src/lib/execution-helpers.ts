@@ -11,114 +11,17 @@ function coerceOperand(v: any): any {
   return v;
 }
 
-// Deterministic 32-bit PRNG (mulberry32). The Dense Layer derives its weight
-// matrix from this so weights stay stable across re-renders/reloads AND match
-// the Python engine exactly — _mulberry32 in backend/execution_engine.py is a
-// bit-for-bit port; change one and you must change both.
-export function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1) >>> 0;
-    t = (((t + (Math.imul(t ^ (t >>> 7), t | 61) >>> 0)) >>> 0) ^ t) >>> 0;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/**
- * Weight matrix for a Dense Layer: weights[neuron][input] in [-1, 1),
- * generated row-by-row from the seeded PRNG (same order as the Python mirror).
- */
-export function generateWeights(seed: number, inputSize: number, neurons: number): number[][] {
-  const rand = mulberry32(seed);
-  const weights: number[][] = [];
-  for (let j = 0; j < neurons; j++) {
-    const row: number[] = [];
-    for (let i = 0; i < inputSize; i++) {
-      row.push(rand() * 2 - 1);
-    }
-    weights.push(row);
-  }
-  return weights;
-}
-
-// Coerces a port value into a numeric vector (AI Model nodes pass arrays).
-export function toNumberVector(v: any): number[] {
-  if (!Array.isArray(v)) return [];
-  return v.map((x) => {
-    const n = Number(x);
-    return isNaN(n) ? 0 : n;
-  });
-}
-
-const CONV_ACTIVATIONS: Record<string, (z: number) => number> = {
-  relu: (z) => Math.max(0, z),
-  sigmoid: (z) => 1 / (1 + Math.exp(-z)),
-  tanh: (z) => Math.tanh(z),
-};
-
-export function conv1dOutputPositions(inputLen: number, kernelSize: number, stride: number): number {
-  if (inputLen < kernelSize || kernelSize < 1 || stride < 1) return 0;
-  return Math.floor((inputLen - kernelSize) / stride) + 1;
-}
-
-/**
- * Runs a real 1D convolution: `filters` small kernels (generated from `seed`,
- * same mulberry32 PRNG as Dense Layer) each slide across `input` with the
- * given stride, producing one activated value per window. Filters' outputs
- * are concatenated into a single feature-map vector — unlike a Dense Layer,
- * each output only ever depends on a local neighborhood of the input.
- */
-export function conv1dForward(
-  input: number[],
-  seed: number,
-  kernelSize: number,
-  filters: number,
-  stride: number,
-  activation: string
-): number[] {
-  const positions = conv1dOutputPositions(input.length, kernelSize, stride);
-  if (positions === 0) return [];
-  const kernels = generateWeights(seed, kernelSize, filters); // kernels[f][k]
-  const fn = CONV_ACTIVATIONS[activation] ?? CONV_ACTIVATIONS.relu;
-  const out: number[] = [];
-  for (let f = 0; f < filters; f++) {
-    for (let p = 0; p < positions; p++) {
-      let z = 0;
-      for (let k = 0; k < kernelSize; k++) z += kernels[f][k] * input[p * stride + k];
-      out.push(fn(Math.max(-60, Math.min(60, z))));
-    }
-  }
-  return out;
-}
-
-/**
- * Full [output][input] weight matrix for a Conv1D Layer, mostly zero except
- * each output's local receptive field — lets the 3D viewer and inline weight
- * web reuse the exact same dense-matrix rendering path as a Dense Layer while
- * still only lighting up the real local connections.
- */
-export function conv1dFullWeights(
-  inputLen: number,
-  seed: number,
-  kernelSize: number,
-  filters: number,
-  stride: number
-): number[][] {
-  const positions = conv1dOutputPositions(inputLen, kernelSize, stride);
-  if (positions === 0) return [];
-  const kernels = generateWeights(seed, kernelSize, filters);
-  const weights: number[][] = [];
-  for (let f = 0; f < filters; f++) {
-    for (let p = 0; p < positions; p++) {
-      const row = new Array(inputLen).fill(0);
-      for (let k = 0; k < kernelSize; k++) row[p * stride + k] = kernels[f][k];
-      weights.push(row);
-    }
-  }
-  return weights;
-}
+// NN math lives in nn-math.ts (500-line guardrail split); re-exported here so
+// existing importers keep working.
+import { toNumberVector, generateWeights, conv1dForward } from "./nn-math";
+export {
+  mulberry32,
+  generateWeights,
+  toNumberVector,
+  conv1dOutputPositions,
+  conv1dForward,
+  conv1dFullWeights,
+} from "./nn-math";
 
 /**
  * Resolves any condition-ish value (booleans, "true"/"1"/"yes" strings, or a
@@ -317,6 +220,16 @@ export function computeNodeOutputs(
     case "counterNode":
       outputs.count = Number(config.count ?? 0);
       break;
+    case "rangeNode": {
+      const value = Number(inputs.value ?? 0);
+      const min = Number(config.min ?? 0);
+      const max = Number(config.max ?? 0);
+      outputs.above = value > max;
+      outputs.below = value < min;
+      outputs.inRange = !outputs.above && !outputs.below;
+      outputs.count = Number(config.count ?? config.initialCount ?? 0);
+      break;
+    }
     case "randomNode": {
       const minVal = Number(inputs.min ?? 0);
       const maxVal = Number(inputs.max ?? 100);
@@ -328,6 +241,15 @@ export function computeNodeOutputs(
     case "textOutputNode":
       outputs.value = inputs.value;
       break;
+    case "assertNode": {
+      // Loose equality with numeric coercion — "5" passes against 5, so
+      // expectations typed as text match wired numbers (same tolerance the
+      // Compare node's == already applies).
+      const a = coerceOperand(inputs.value);
+      const b = coerceOperand(inputs.expected);
+      outputs.pass = a == b;
+      break;
+    }
     case "thresholdNeuron": {
       const value = Number(inputs.value ?? 0);
       const threshold = Number(inputs.threshold ?? 0);
@@ -466,6 +388,18 @@ export async function handleTriggerOperation(
         : Number(config.count ?? 0) + change;
 
     updatedConfig = { ...config, count: currentCount };
+  }
+  else if (type === "rangeNode") {
+    if (targetPortId === "resetTrigger") {
+      updatedConfig = { ...config, count: Number(config.initialCount ?? 0) };
+    } else {
+      const value = Number(inputs.value ?? 0);
+      const min = Number(config.min ?? 0);
+      const max = Number(config.max ?? 0);
+      const inRange = value >= min && value <= max;
+      const current = Number(config.count ?? config.initialCount ?? 0);
+      updatedConfig = { ...config, count: inRange ? current + 1 : current - 1 };
+    }
   }
 
   return { nextTriggerPort, updatedConfig };

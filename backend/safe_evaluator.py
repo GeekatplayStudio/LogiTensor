@@ -124,6 +124,16 @@ def to_postfix(tokens):
         output.append(top)
     return output
 
+def _js_str(v):
+    """Stringify like JavaScript so mixed concatenation matches the TS engine:
+    booleans are lowercase, integral floats drop the trailing .0 (10.0 -> "10")."""
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(v)
+
+
 def evaluate_postfix(postfix, context):
     stack = []
     for t_type, val in postfix:
@@ -146,7 +156,12 @@ def evaluate_postfix(postfix, context):
                 right = stack.pop()
                 left = stack.pop()
                 if val == "+":
-                    stack.append(left + right)
+                    # Mirror JS `+`: if either side is a string, concatenate
+                    # (10 + " volts" -> "10 volts"), matching the TS engine.
+                    if isinstance(left, str) or isinstance(right, str):
+                        stack.append(_js_str(left) + _js_str(right))
+                    else:
+                        stack.append(left + right)
                 elif val == "-":
                     stack.append(left - right)
                 elif val == "*":
