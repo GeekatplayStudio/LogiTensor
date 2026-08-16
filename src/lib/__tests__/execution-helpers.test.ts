@@ -271,6 +271,18 @@ describe("New Data & Text nodes", () => {
     expect(out.count).toBe(3);
   });
 
+  it("splits on whitespace runs and on lines when asked", () => {
+    const words = computeNodeOutputs("splitTextNode", { text: "  the   quick\tbrown\nfox " }, { mode: "whitespace" });
+    expect(words.list).toEqual(["the", "quick", "brown", "fox"]);
+    expect(words.count).toBe(4);
+    expect(computeNodeOutputs("splitTextNode", { text: "   " }, { mode: "whitespace" }).list).toEqual([]);
+    const lines = computeNodeOutputs("splitTextNode", { text: "one\r\ntwo\nthree" }, { mode: "lines" });
+    expect(lines.list).toEqual(["one", "two", "three"]);
+    expect(computeNodeOutputs("splitTextNode", { text: "" }, { mode: "lines" }).list).toEqual([]);
+    // Graphs saved without the config key keep the original delimiter behaviour.
+    expect(computeNodeOutputs("splitTextNode", { text: "a b,c", delimiter: "," }).list).toEqual(["a b", "c"]);
+  });
+
   it("joins a list with a delimiter", () => {
     expect(computeNodeOutputs("joinTextNode", { list: [1, 2, 3], delimiter: "-" }).out).toBe("1-2-3");
   });
@@ -352,6 +364,64 @@ describe("Lists category", () => {
     const out = computeNodeOutputs("listContainsNode", { list: [1, 2, 3], value: "2" });
     expect(out.out).toBe(true);
     expect(out.index).toBe(1);
+  });
+
+  it("ranks entries most-frequent first, breaking ties by first appearance", () => {
+    // "b" and "c" both appear twice; "b" is first in the input, so it ranks first.
+    const out = computeNodeOutputs("listFrequencyNode", { list: ["a", "b", "c", "b", "c", "a", "a"] });
+    expect(out.values).toEqual(["a", "b", "c"]);
+    expect(out.counts).toEqual([3, 2, 2]);
+    expect(out.unique).toBe(3);
+  });
+
+  it("groups case-insensitively by default and case-sensitively on request", () => {
+    const folded = computeNodeOutputs("listFrequencyNode", { list: ["The", "the", "THE", "cat"] });
+    expect(folded.values).toEqual(["The", "cat"]);
+    expect(folded.counts).toEqual([3, 1]);
+    const exact = computeNodeOutputs(
+      "listFrequencyNode",
+      { list: ["The", "the", "THE", "cat"] },
+      { caseSensitive: true }
+    );
+    expect(exact.counts).toEqual([1, 1, 1, 1]);
+    expect(exact.unique).toBe(4);
+  });
+
+  it("drops entries below Min Count and truncates to Top N", () => {
+    const list = ["a", "a", "a", "b", "b", "c"];
+    expect(computeNodeOutputs("listFrequencyNode", { list }, { minCount: 2 }).values).toEqual(["a", "b"]);
+    expect(computeNodeOutputs("listFrequencyNode", { list }, { topN: 1 }).values).toEqual(["a"]);
+    // Unique always counts the whole input, not just the entries kept.
+    expect(computeNodeOutputs("listFrequencyNode", { list }, { topN: 1 }).unique).toBe(3);
+  });
+
+  it("renders a ready-to-display report, one 'item: count' per line", () => {
+    const out = computeNodeOutputs("listFrequencyNode", { list: ["red", "blue", "red"] });
+    expect(out.report).toBe("red: 2\nblue: 1");
+    expect(computeNodeOutputs("listFrequencyNode", { list: [] }).report).toBe("");
+  });
+
+  it("groups non-strings by the shared stringification", () => {
+    const out = computeNodeOutputs("listFrequencyNode", { list: [1, "1", 2, true] });
+    expect(out.values).toEqual([1, 2, true]);
+    expect(out.counts).toEqual([2, 1, 1]);
+  });
+
+  it("dedupes preserving first-seen order", () => {
+    const out = computeNodeOutputs("listUniqueNode", { list: ["b", "a", "B", "c", "a"] });
+    expect(out.out).toEqual(["b", "a", "c"]);
+    expect(out.count).toBe(3);
+    expect(computeNodeOutputs("listUniqueNode", { list: ["b", "B"] }, { caseSensitive: true }).out).toEqual(["b", "B"]);
+  });
+
+  it("counts how many times one item occurs", () => {
+    expect(computeNodeOutputs("listCountItemNode", { list: ["a", "B", "b"], item: "b" }).count).toBe(2);
+    expect(
+      computeNodeOutputs("listCountItemNode", { list: ["a", "B", "b"], item: "b" }, { caseSensitive: true }).count
+    ).toBe(1);
+    // Loose text comparison: a wired number matches a typed "2".
+    expect(computeNodeOutputs("listCountItemNode", { list: [1, 2, 2], item: "2" }).count).toBe(2);
+    expect(computeNodeOutputs("listCountItemNode", { list: ["a"], item: "z" }).count).toBe(0);
   });
 
   it("republishes the accumulated append buffer", () => {

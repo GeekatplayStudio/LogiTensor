@@ -138,7 +138,7 @@ function FlowCanvas() {
             if (["ifElseTrigger", "condValue", "delayNode", "counterNode", "forLoopNode", "whileLoopNode", "rangeNode", "gateNode", "onceNode", "sequenceNode"].includes(n.type || "")) return MUTED_COLORS.purple;
             if (["compareNode", "expressionNode", "mathNode", "mathFunctionNode", "randomNode", "clampNode", "mapRangeNode", "lerpNode", "betweenNode", "roundToNode"].includes(n.type || "")) return MUTED_COLORS.amber;
             if (["filterNode", "stringOpNode", "replaceTextNode", "splitTextNode", "joinTextNode", "substringNode", "templateNode", "jsonParseNode", "jsonStringifyNode", "toNumberNode", "toStringNode", "toBooleanNode", "regexMatchNode"].includes(n.type || "")) return MUTED_COLORS.emerald;
-            if (["listAppendNode", "listLengthNode", "listGetNode", "listStatsNode", "listSortNode", "listSliceNode", "listContainsNode"].includes(n.type || "")) return MUTED_COLORS.olive;
+            if (["listAppendNode", "listLengthNode", "listGetNode", "listStatsNode", "listSortNode", "listSliceNode", "listContainsNode", "listFrequencyNode", "listUniqueNode", "listCountItemNode"].includes(n.type || "")) return MUTED_COLORS.olive;
             if (["loggerNode", "textOutputNode", "assertNode", "valueListNode", "gaugeNode"].includes(n.type || "")) return MUTED_COLORS.rose;
             if (["thresholdNeuron", "maxSelectorNode", "synapseNode", "leakyIntegrateFire"].includes(n.type || "")) return MUTED_COLORS.indigo;
             if (["imageInputGrid", "denseLayer", "conv1dLayer", "outputLayerNode"].includes(n.type || "")) return MUTED_COLORS.cyan;

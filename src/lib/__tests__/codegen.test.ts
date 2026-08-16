@@ -360,6 +360,32 @@ describe("extended node library emitters", () => {
     expect(js).toContain("sequence_1_step = (sequence_1_step + 1) % 3;");
   });
 
+  it("emits the frequency/unique/count-item list nodes with their runtime helpers", () => {
+    const nodes = [
+      makeNode("listFrequencyNode", "f1", { topN: 3 }),
+      makeNode("listUniqueNode", "u1"),
+      makeNode("listCountItemNode", "c1"),
+      makeNode("loggerNode", "log1"),
+    ];
+    const edges = [edge("f1", "report", "log1", "value")];
+    for (const language of ["javascript", "python"] as const) {
+      const res = generateCode(nodes, edges, language);
+      expect(res.warnings.filter((w) => w.includes("No emitter"))).toEqual([]);
+      expect(res.code).toContain("lb_list_frequency");
+      expect(res.code).toContain("lb_list_unique");
+      expect(res.code).toContain("lb_list_count_item");
+      // report is slot 2 of the helper's [values, counts, report, unique].
+      expect(res.code).toContain("[2]");
+    }
+  });
+
+  it("emits Split Text's whitespace mode as the third lb_split argument", () => {
+    const nodes = [makeNode("splitTextNode", "s1", { mode: "whitespace" }), makeNode("loggerNode", "log1")];
+    const edges = [edge("s1", "list", "log1", "value")];
+    expect(generateCode(nodes, edges, "javascript").code).toContain('"whitespace"');
+    expect(generateCode(nodes, edges, "python").code).toContain('"whitespace"');
+  });
+
   it("has an emitter for every registered node type (coverage guard)", () => {
     // Guards the gap this suite closed: a new node type added to
     // NODE_DEFINITIONS without a codegen emitter fails here rather than

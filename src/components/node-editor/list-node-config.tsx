@@ -132,6 +132,44 @@ export default function ListNodeConfig({
         </div>
       )}
 
+      {(type === "listFrequencyNode" || type === "listUniqueNode" || type === "listCountItemNode") && (
+        <div className="flex items-center justify-between py-1">
+          <span className="text-[10px] text-zinc-400">Case sensitive</span>
+          <Switch
+            checked={!!data.config?.caseSensitive}
+            onCheckedChange={(val) => onConfigChange("caseSensitive", val)}
+          />
+        </div>
+      )}
+
+      {type === "listFrequencyNode" && (
+        <div className="grid grid-cols-2 gap-1">
+          <div className="space-y-0.5">
+            <Label className="text-[10px] text-zinc-400">Min Count</Label>
+            <Input
+              type="number"
+              min={1}
+              value={data.config?.minCount ?? 1}
+              onChange={(e) => onConfigChange("minCount", e.target.value === "" ? 1 : Number(e.target.value))}
+              className={inputCls}
+            />
+          </div>
+          <div className="space-y-0.5">
+            <Label className="text-[10px] text-zinc-400">Top N</Label>
+            <Input
+              type="number"
+              min={0}
+              value={data.config?.topN ?? 0}
+              onChange={(e) => onConfigChange("topN", e.target.value === "" ? 0 : Number(e.target.value))}
+              className={inputCls}
+            />
+          </div>
+          <p className="col-span-2 text-[9px] text-zinc-600 leading-tight">
+            Entries counted fewer than Min Count are dropped. Top N of 0 keeps them all.
+          </p>
+        </div>
+      )}
+
       {type === "gaugeNode" && (
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">

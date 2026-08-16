@@ -31,7 +31,7 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
     category = "Math & Compare";
   } else if (["filterNode", "stringOpNode", "replaceTextNode", "splitTextNode", "joinTextNode", "substringNode", "templateNode", "jsonParseNode", "jsonStringifyNode", "toNumberNode", "toStringNode", "toBooleanNode", "regexMatchNode"].includes(type || "")) {
     category = "Data & Text";
-  } else if (["listAppendNode", "listLengthNode", "listGetNode", "listStatsNode", "listSortNode", "listSliceNode", "listContainsNode"].includes(type || "")) {
+  } else if (["listAppendNode", "listLengthNode", "listGetNode", "listStatsNode", "listSortNode", "listSliceNode", "listContainsNode", "listFrequencyNode", "listUniqueNode", "listCountItemNode"].includes(type || "")) {
     category = "Lists";
   } else if (["loggerNode", "textOutputNode", "assertNode", "valueListNode", "gaugeNode"].includes(type || "")) {
     category = "Outputs";

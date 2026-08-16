@@ -1,0 +1,112 @@
+// Runtime helper bodies for the frequency/dedupe list nodes, split out of
+// runtime-helpers.ts to keep that module under the repo's 500-line guardrail.
+// Same contract: each body mirrors list-node-compute.ts / lists.py exactly.
+
+export type ListRuntimeHelper = "lb_list_frequency" | "lb_list_unique" | "lb_list_count_item";
+
+/** Helpers each of these calls — merged into runtime-helpers' HELPER_DEPS. */
+export const LIST_HELPER_DEPS: Record<ListRuntimeHelper, string[]> = {
+  lb_list_frequency: ["lb_to_list", "lb_to_str"],
+  lb_list_unique: ["lb_to_list", "lb_to_str"],
+  lb_list_count_item: ["lb_to_list", "lb_to_str"],
+};
+
+export const LIST_JS_HELPERS: Record<ListRuntimeHelper, string[]> = {
+  lb_list_frequency: [
+    "// returns [values, counts, report, unique]; ties broken by first appearance",
+    "function lb_list_frequency(list, caseSensitive, minCount, topN) {",
+    "  const key = (v) => (caseSensitive ? lb_to_str(v) : lb_to_str(v).toLowerCase());",
+    "  const byKey = new Map();",
+    "  lb_to_list(list).forEach((v, i) => {",
+    "    const k = key(v);",
+    "    const seen = byKey.get(k);",
+    "    if (seen) seen.count += 1;",
+    "    else byKey.set(k, { value: v, count: 1, firstIndex: i });",
+    "  });",
+    "  const all = [...byKey.values()].sort((a, b) => b.count - a.count || a.firstIndex - b.firstIndex);",
+    "  let kept = all.filter((t) => t.count >= minCount);",
+    "  if (topN > 0) kept = kept.slice(0, topN);",
+    "  return [",
+    "    kept.map((t) => t.value),",
+    "    kept.map((t) => t.count),",
+    '    kept.map((t) => lb_to_str(t.value) + ": " + t.count).join("\\n"),',
+    "    all.length,",
+    "  ];",
+    "}",
+  ],
+  lb_list_unique: [
+    "// returns [values, count]; first occurrence wins and keeps its position",
+    "function lb_list_unique(list, caseSensitive) {",
+    "  const key = (v) => (caseSensitive ? lb_to_str(v) : lb_to_str(v).toLowerCase());",
+    "  const seen = new Set();",
+    "  const out = [];",
+    "  for (const v of lb_to_list(list)) {",
+    "    const k = key(v);",
+    "    if (seen.has(k)) continue;",
+    "    seen.add(k);",
+    "    out.push(v);",
+    "  }",
+    "  return [out, out.length];",
+    "}",
+  ],
+  lb_list_count_item: [
+    '// compared as text so a wired 5 matches a typed "5"',
+    "function lb_list_count_item(list, item, caseSensitive) {",
+    "  const key = (v) => (caseSensitive ? lb_to_str(v) : lb_to_str(v).toLowerCase());",
+    "  const needle = key(item);",
+    "  return lb_to_list(list).filter((v) => key(v) === needle).length;",
+    "}",
+  ],
+};
+
+export const LIST_PY_HELPERS: Record<ListRuntimeHelper, string[]> = {
+  lb_list_frequency: [
+    "def lb_list_frequency(items, case_sensitive, min_count, top_n):",
+    "    # returns [values, counts, report, unique]; ties broken by first appearance",
+    "    def key(v):",
+    "        s = lb_to_str(v)",
+    "        return s if case_sensitive else s.lower()",
+    "    by_key = {}",
+    "    for i, v in enumerate(lb_to_list(items)):",
+    "        k = key(v)",
+    "        if k in by_key:",
+    '            by_key[k]["count"] += 1',
+    "        else:",
+    '            by_key[k] = {"value": v, "count": 1, "firstIndex": i}',
+    '    all_t = sorted(by_key.values(), key=lambda t: (-t["count"], t["firstIndex"]))',
+    '    kept = [t for t in all_t if t["count"] >= min_count]',
+    "    if top_n > 0:",
+    "        kept = kept[:top_n]",
+    "    return [",
+    '        [t["value"] for t in kept],',
+    '        [t["count"] for t in kept],',
+    '        "\\n".join(lb_to_str(t["value"]) + ": " + str(t["count"]) for t in kept),',
+    "        len(all_t),",
+    "    ]",
+  ],
+  lb_list_unique: [
+    "def lb_list_unique(items, case_sensitive):",
+    "    # returns [values, count]; first occurrence wins and keeps its position",
+    "    def key(v):",
+    "        s = lb_to_str(v)",
+    "        return s if case_sensitive else s.lower()",
+    "    seen = set()",
+    "    out = []",
+    "    for v in lb_to_list(items):",
+    "        k = key(v)",
+    "        if k in seen:",
+    "            continue",
+    "        seen.add(k)",
+    "        out.append(v)",
+    "    return [out, len(out)]",
+  ],
+  lb_list_count_item: [
+    "def lb_list_count_item(items, item, case_sensitive):",
+    '    # compared as text so a wired 5 matches a typed "5"',
+    "    def key(v):",
+    "        s = lb_to_str(v)",
+    "        return s if case_sensitive else s.lower()",
+    "    needle = key(item)",
+    "    return sum(1 for v in lb_to_list(items) if key(v) == needle)",
+  ],
+};

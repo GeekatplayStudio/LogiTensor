@@ -10,6 +10,18 @@ function roundTo(value: number, decimals: number): number {
   return Math.floor(value * factor + 0.5) / factor;
 }
 
+/** Split Text's three modes. `whitespace` is the natural choice for words;
+ * `lines` accepts CRLF, CR and LF alike. Empty text yields an empty list in
+ * both of those, rather than a single blank entry. */
+export function splitByMode(text: string, mode: string, delimiter: string): string[] {
+  if (mode === "whitespace") {
+    const trimmed = text.trim();
+    return trimmed === "" ? [] : trimmed.split(/\s+/);
+  }
+  if (mode === "lines") return text === "" ? [] : text.split(/\r\n|\r|\n/);
+  return delimiter === "" ? [...text] : text.split(delimiter);
+}
+
 /**
  * Pure computations for the Inputs / Logic / Math / Data & Text / Outputs
  * nodes added on top of the original library. Registered into
@@ -68,10 +80,12 @@ export const EXTRA_COMPUTE: Record<string, Compute> = {
 
   roundToNode: (inputs, config) => ({ out: roundTo(toNum(inputs.value), toNum(config.decimals, 2)) }),
 
-  splitTextNode: (inputs) => {
+  splitTextNode: (inputs, config) => {
     const text = toStr(inputs.text);
-    const delim = String(inputs.delimiter ?? "");
-    const list = delim === "" ? [...text] : text.split(delim);
+    // Graphs saved before the mode config existed have no key — default to
+    // the original delimiter behaviour so they keep working unchanged.
+    const mode = config.mode ?? "delimiter";
+    const list = splitByMode(text, mode, String(inputs.delimiter ?? ""));
     return { list, count: list.length };
   },
 

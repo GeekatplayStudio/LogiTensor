@@ -8,7 +8,13 @@ import { logEvent } from "./debug-log";
 // only chooses type/config/wiring — it can never inject ports or code).
 
 export interface NlGraphSpec {
-  nodes?: { id?: string; type?: string; config?: Record<string, unknown> }[];
+  nodes?: {
+    id?: string;
+    type?: string;
+    config?: Record<string, unknown>;
+    /** static values for unwired data input ports, keyed by port id */
+    inputs?: Record<string, unknown>;
+  }[];
   edges?: { source?: string; sourceHandle?: string; target?: string; targetHandle?: string }[];
 }
 
@@ -26,7 +32,14 @@ export function buildNodeSchema(): object[] {
   return Object.values(NODE_DEFINITIONS).map((def) => ({
     type: def.type,
     description: def.description,
-    inputs: def.inputs.map((i) => `${i.id}(${i.type === "trigger" ? "trigger" : i.dataType})`),
+    // Data inputs show their default, so the model can tell what it may set
+    // via `inputs` (a Split Text's `delimiter` lives on a port, not in config
+    // — without this the model had no way to express "split on spaces").
+    inputs: def.inputs.map((i) =>
+      i.type === "trigger"
+        ? `${i.id}(trigger)`
+        : `${i.id}(${i.dataType}${i.value !== undefined ? `=${JSON.stringify(i.value)}` : ""})`
+    ),
     outputs: def.outputs.map((o) => `${o.id}(${o.type === "trigger" ? "trigger" : o.dataType})`),
     config: def.config ?? {},
   }));
@@ -48,11 +61,27 @@ export function materializeNlGraph(spec: NlGraphSpec, idPrefix = `nl_${Date.now(
     // Config is filtered to keys the definition declares — the model cannot
     // introduce arbitrary state (pythonScript.code is the one free-form key
     // its own definition declares, and it runs sandboxed server-side anyway).
+    const inputs = def.inputs.map((p) => ({ ...p }));
+    const setInput = (portId: string, value: unknown): boolean => {
+      const port = inputs.find((p) => p.id === portId && p.type === "data");
+      if (!port) return false;
+      port.value = value;
+      return true;
+    };
+
     const config: Record<string, unknown> = { ...(def.config ?? {}) };
     for (const [k, v] of Object.entries(n.config ?? {})) {
       if (k in config) config[k] = v;
+      // Models routinely put a port's value in config (e.g. Split Text's
+      // `delimiter`, which is an input port). Route it rather than dropping
+      // it — the intent is unambiguous when the name matches a data port.
+      else if (setInput(k, v)) continue;
       else problems.push(`${def.label}: config key "${k}" not recognized — ignored.`);
     }
+    for (const [k, v] of Object.entries(n.inputs ?? {})) {
+      if (!setInput(k, v)) problems.push(`${def.label}: input "${k}" is not a data port — ignored.`);
+    }
+
     nodes.push({
       id,
       type: def.type,
@@ -60,7 +89,7 @@ export function materializeNlGraph(spec: NlGraphSpec, idPrefix = `nl_${Date.now(
       data: {
         label: def.label,
         type: def.type,
-        inputs: def.inputs.map((p) => ({ ...p })),
+        inputs,
         outputs: def.outputs.map((p) => ({ ...p })),
         config: config as NodeData["config"],
         executionState: "idle",

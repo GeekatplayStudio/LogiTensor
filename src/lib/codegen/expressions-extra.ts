@@ -75,7 +75,7 @@ export function extraOutputExpr(ctx: EmitCtx, node: GraphNode, portId: string): 
 
     // --- Data & Text ----------------------------------------------------
     case "splitTextNode": {
-      const parts = call("lb_split", inp("text"), inp("delimiter"));
+      const parts = call("lb_split", inp("text"), inp("delimiter"), literal(p, String(config.mode ?? "delimiter")));
       return portId === "count" ? p.strLen(parts) : parts;
     }
     case "joinTextNode":
@@ -124,6 +124,23 @@ export function extraOutputExpr(ctx: EmitCtx, node: GraphNode, portId: string): 
     case "listContainsNode":
       // helper returns [contains, index].
       return `${call("lb_list_contains", inp("list"), inp("value"))}[${portId === "index" ? 1 : 0}]`;
+    case "listFrequencyNode": {
+      // helper returns [values, counts, report, unique] — indexable in both languages.
+      const slot = { values: 0, counts: 1, report: 2, unique: 3 }[portId] ?? 0;
+      const freq = call(
+        "lb_list_frequency",
+        inp("list"),
+        p.bool(Boolean(config.caseSensitive)),
+        literal(p, Math.trunc(Number(config.minCount ?? 1)) || 0),
+        literal(p, Math.trunc(Number(config.topN ?? 0)) || 0),
+      );
+      return `${freq}[${slot}]`;
+    }
+    case "listUniqueNode":
+      // helper returns [values, count].
+      return `${call("lb_list_unique", inp("list"), p.bool(Boolean(config.caseSensitive)))}[${portId === "count" ? 1 : 0}]`;
+    case "listCountItemNode":
+      return call("lb_list_count_item", inp("list"), inp("item"), p.bool(Boolean(config.caseSensitive)));
     case "listAppendNode":
       return portId === "length" ? p.strLen(stateVar(ctx, node, "items")) : stateVar(ctx, node, "items");
 

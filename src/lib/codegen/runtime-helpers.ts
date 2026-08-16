@@ -1,4 +1,6 @@
 import type { LanguageProfile } from "./types";
+import type { ListRuntimeHelper } from "./runtime-helpers-lists";
+import { LIST_HELPER_DEPS, LIST_JS_HELPERS, LIST_PY_HELPERS } from "./runtime-helpers-lists";
 
 // Generated-program runtime helpers. The node emitters stay language-neutral
 // (see LanguageProfile) by calling these by name; the *bodies* are the only
@@ -24,10 +26,12 @@ export type RuntimeHelper =
   | "lb_list_stats"
   | "lb_list_sort"
   | "lb_list_slice"
-  | "lb_list_contains";
+  | "lb_list_contains"
+  | ListRuntimeHelper;
 
 /** Helpers each helper calls — pulled in transitively by requireHelper. */
 const HELPER_DEPS: Record<RuntimeHelper, RuntimeHelper[]> = {
+  ...(LIST_HELPER_DEPS as Record<ListRuntimeHelper, RuntimeHelper[]>),
   lb_to_str: [],
   lb_to_num: [],
   lb_to_bool: [],
@@ -47,6 +51,7 @@ const HELPER_DEPS: Record<RuntimeHelper, RuntimeHelper[]> = {
 };
 
 const JS_HELPERS: Record<RuntimeHelper, string[]> = {
+  ...LIST_JS_HELPERS,
   lb_to_str: [
     "function lb_to_str(v) {",
     '  if (v === null || v === undefined) return "";',
@@ -90,8 +95,13 @@ const JS_HELPERS: Record<RuntimeHelper, string[]> = {
     "}",
   ],
   lb_split: [
-    "function lb_split(text, delim) {",
+    "function lb_split(text, delim, mode) {",
     "  const s = lb_to_str(text);",
+    '  if (mode === "whitespace") {',
+    "    const t = s.trim();",
+    '    return t === "" ? [] : t.split(/\\s+/);',
+    "  }",
+    '  if (mode === "lines") return s === "" ? [] : s.split(/\\r\\n|\\r|\\n/);',
     "  const d = lb_to_str(delim);",
     '  return d === "" ? [...s] : s.split(d);',
     "}",
@@ -183,6 +193,7 @@ const JS_HELPERS: Record<RuntimeHelper, string[]> = {
 };
 
 const PY_HELPERS: Record<RuntimeHelper, string[]> = {
+  ...LIST_PY_HELPERS,
   lb_to_str: [
     "def lb_to_str(v):",
     "    # mirrors JS stringification: true/false, 5 not 5.0, JSON for containers",
@@ -242,8 +253,12 @@ const PY_HELPERS: Record<RuntimeHelper, string[]> = {
     "    return coerce(a) == coerce(b)",
   ],
   lb_split: [
-    "def lb_split(text, delim):",
+    "def lb_split(text, delim, mode):",
     "    s = lb_to_str(text)",
+    '    if mode == "whitespace":',
+    "        return s.split()",
+    '    if mode == "lines":',
+    '        return [] if s == "" else s.replace("\\r\\n", "\\n").replace("\\r", "\\n").split("\\n")',
     "    d = lb_to_str(delim)",
     '    return list(s) if d == "" else s.split(d)',
   ],

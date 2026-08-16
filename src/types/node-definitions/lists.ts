@@ -82,6 +82,53 @@ export const LIST_NODES: Record<string, NodeDefinition> = {
     ],
     outputs: [{ id: "out", name: "Slice", type: "data", dataType: "any" }],
   },
+  listFrequencyNode: {
+    type: "listFrequencyNode",
+    label: "Frequency",
+    category: "Lists",
+    description:
+      "Groups identical entries and counts them, ordered most-used first. Report is a ready-to-display 'item: count' block.",
+    inputs: [
+      { id: "list", name: "List", type: "data", dataType: "any", value: [] },
+      ENABLED_INPUT,
+    ],
+    outputs: [
+      { id: "values", name: "Values", type: "data", dataType: "any" },
+      { id: "counts", name: "Counts", type: "data", dataType: "any" },
+      { id: "report", name: "Report", type: "data", dataType: "string" },
+      { id: "unique", name: "Unique", type: "data", dataType: "number" },
+    ],
+    // minCount drops rare entries; topN 0 means "keep them all".
+    config: { caseSensitive: false, minCount: 1, topN: 0 },
+  },
+  listUniqueNode: {
+    type: "listUniqueNode",
+    label: "Unique",
+    category: "Lists",
+    description: "Removes duplicate entries, keeping the first occurrence of each in its original position.",
+    inputs: [
+      { id: "list", name: "List", type: "data", dataType: "any", value: [] },
+      ENABLED_INPUT,
+    ],
+    outputs: [
+      { id: "out", name: "Unique", type: "data", dataType: "any" },
+      { id: "count", name: "Count", type: "data", dataType: "number" },
+    ],
+    config: { caseSensitive: false },
+  },
+  listCountItemNode: {
+    type: "listCountItemNode",
+    label: "Count Item",
+    category: "Lists",
+    description: "Counts how many times one specific item appears in a list.",
+    inputs: [
+      { id: "list", name: "List", type: "data", dataType: "any", value: [] },
+      { id: "item", name: "Item", type: "data", dataType: "any", value: "" },
+      ENABLED_INPUT,
+    ],
+    outputs: [{ id: "count", name: "Count", type: "data", dataType: "number" }],
+    config: { caseSensitive: false },
+  },
   listContainsNode: {
     type: "listContainsNode",
     label: "List Contains",

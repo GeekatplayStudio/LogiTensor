@@ -47,7 +47,8 @@ export const DATA_TEXT_NODES: Record<string, NodeDefinition> = {
     type: "splitTextNode",
     label: "Split Text",
     category: "Data & Text",
-    description: "Splits text on a delimiter into a list, also reporting how many parts were produced.",
+    description:
+      "Splits text into a list — on a delimiter, on runs of whitespace (words), or into lines — also reporting how many parts were produced.",
     inputs: [
       { id: "text", name: "Text", type: "data", dataType: "string", value: "" },
       { id: "delimiter", name: "Delimiter", type: "data", dataType: "string", value: "," },
@@ -57,6 +58,7 @@ export const DATA_TEXT_NODES: Record<string, NodeDefinition> = {
       { id: "list", name: "List", type: "data", dataType: "any" },
       { id: "count", name: "Count", type: "data", dataType: "number" },
     ],
+    config: { mode: "delimiter" }, // delimiter | whitespace | lines
   },
   joinTextNode: {
     type: "joinTextNode",

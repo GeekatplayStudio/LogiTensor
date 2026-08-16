@@ -32,7 +32,10 @@ PREFERRED_MODELS = [
 SYSTEM_PROMPT = """You convert requests into a node graph for a visual logic editor.
 
 Respond with ONLY a JSON object, no prose and no markdown fences:
-{"nodes":[{"id":"n1","type":"<type from catalog>","config":{...}}],
+{"nodes":[{"id":"n1","type":"<type from catalog>",
+           "config":{...},          // only keys shown in that type's config
+           "inputs":{"portId":val}  // static values for unwired data inputs
+          }],
  "edges":[{"source":"n1","sourceHandle":"<output port id>",
            "target":"n2","targetHandle":"<input port id>"}]}
 
@@ -50,9 +53,21 @@ PORT RULES — these are the rules that are most often broken, follow them exact
    `triggerInput` node, wired triggerOut -> that node's trigger input.
 3. NEVER emit an edge whose source, sourceHandle, target or targetHandle is
    null, empty or missing. Omit the edge entirely instead.
-4. Only use node types and port ids that appear in the catalog. Only use
-   config keys shown for that node type.
-5. Wire every node you create into the flow. Do not leave nodes unconnected.
+4. Only use node types and port ids that appear in the catalog, EXACTLY as
+   written. Never invent a port. In particular: most computation nodes are
+   PASSIVE — their input list contains no (trigger) port at all. A passive
+   node recomputes automatically whenever its data inputs change, so it must
+   NOT be triggered. Wiring `triggerOut` into a passive node's imagined
+   `inTrigger` is the single most common failure: the edge is rejected, and
+   the Manual Trigger is left connected to nothing.
+   Look at each node's input list: if it shows no (trigger) entry, only wire
+   data into it.
+5. To set a value on an input that nothing is wired into, use `inputs`, e.g.
+   a Split Text that should split on spaces is
+   {"id":"n3","type":"splitTextNode","inputs":{"delimiter":" "}}.
+   Input defaults are shown in the catalog as `portId(type=default)`.
+   `config` is only for the keys listed under that type's config.
+6. Wire every node you create into the flow. Do not leave nodes unconnected.
 
 WORKED EXAMPLE — request: "log the number 42"
 {"nodes":[{"id":"n1","type":"triggerInput","config":{}},
@@ -61,6 +76,18 @@ WORKED EXAMPLE — request: "log the number 42"
  "edges":[{"source":"n1","sourceHandle":"triggerOut","target":"n3","targetHandle":"inTrigger"},
           {"source":"n2","sourceHandle":"value","target":"n3","targetHandle":"value"}]}
 Note the number goes to `value` and the trigger goes to `inTrigger`.
+
+WORKED EXAMPLE — a passive chain. Request: "split text on spaces and show it".
+Split Text has NO trigger port, so nothing triggers it; it just computes.
+{"nodes":[{"id":"n1","type":"triggerInput","config":{}},
+          {"id":"n2","type":"textAreaInput","config":{"value":"some words"}},
+          {"id":"n3","type":"splitTextNode","inputs":{"delimiter":" "}},
+          {"id":"n4","type":"textOutputNode","config":{}}],
+ "edges":[{"source":"n1","sourceHandle":"triggerOut","target":"n4","targetHandle":"inTrigger"},
+          {"source":"n2","sourceHandle":"value","target":"n3","targetHandle":"text"},
+          {"source":"n3","sourceHandle":"list","target":"n4","targetHandle":"value"}]}
+The trigger goes straight to the node that HAS a trigger port (Text Output),
+skipping over the passive Split Text in between.
 """
 
 CODE_SYSTEM_PROMPT = SYSTEM_PROMPT + """

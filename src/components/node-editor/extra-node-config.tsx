@@ -3,6 +3,13 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import ListNodeConfig from "./list-node-config";
 
 // Config editors for the nodes added on top of the original library. Lives in
@@ -105,6 +112,28 @@ export default function ExtraNodeConfig({
           />
           <p className="text-[9px] text-zinc-600 leading-tight">
             Inputs grow automatically (a, b, c…). Either case works — {"{a}"} and {"{A}"} are the same.
+          </p>
+        </div>
+      )}
+
+      {type === "splitTextNode" && (
+        <div className="space-y-1">
+          <Label className="text-[10px] text-zinc-400">Split On</Label>
+          <Select
+            value={data.config?.mode ?? "delimiter"}
+            onValueChange={(val) => onConfigChange("mode", val)}
+          >
+            <SelectTrigger className="h-7 text-xs bg-zinc-950 border-zinc-800">
+              <SelectValue placeholder="Select mode" />
+            </SelectTrigger>
+            <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-200">
+              <SelectItem value="delimiter">Delimiter</SelectItem>
+              <SelectItem value="whitespace">Whitespace (words)</SelectItem>
+              <SelectItem value="lines">Lines</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-[9px] text-zinc-600 leading-tight">
+            Whitespace and Lines ignore the Delimiter input.
           </p>
         </div>
       )}

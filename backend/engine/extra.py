@@ -8,7 +8,7 @@ import json
 import math
 import re
 import time
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from backend.engine.values import to_bool, to_list, to_num, to_str
 
@@ -66,10 +66,25 @@ def _between(inputs, config) -> Dict[str, Any]:
     return {"out": lo < value < hi}
 
 
-def _split_text(inputs, _config) -> Dict[str, Any]:
+def _split_by_mode(text: str, mode: str, delimiter: str) -> List[str]:
+    """Split Text's three modes. `whitespace` is the natural choice for words;
+    `lines` accepts CRLF, CR and LF alike. Empty text yields an empty list in
+    both of those, rather than a single blank entry."""
+    if mode == "whitespace":
+        # str.split() with no argument already splits on runs of whitespace
+        # and drops the leading/trailing empties, matching the JS /\s+/ path.
+        return text.split()
+    if mode == "lines":
+        return [] if text == "" else re.split(r"\r\n|\r|\n", text)
+    return list(text) if delimiter == "" else text.split(delimiter)
+
+
+def _split_text(inputs, config) -> Dict[str, Any]:
     text = to_str(inputs.get("text"))
     delim = "" if inputs.get("delimiter") is None else str(inputs.get("delimiter"))
-    items = list(text) if delim == "" else text.split(delim)
+    # Graphs saved before the mode config existed have no key — default to the
+    # original delimiter behaviour so they keep working unchanged.
+    items = _split_by_mode(text, config.get("mode", "delimiter"), delim)
     return {"list": items, "count": len(items)}
 
 

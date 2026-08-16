@@ -224,6 +224,20 @@ class TestNewDataTextNodes:
         assert out["list"] == ["a", "b", "c"]
         assert out["count"] == 3
 
+    def test_splits_on_whitespace_runs_and_on_lines_when_asked(self):
+        words = execute_logic_computation(
+            "splitTextNode", {"text": "  the   quick\tbrown\nfox "}, {"mode": "whitespace"}
+        )
+        assert words["list"] == ["the", "quick", "brown", "fox"]
+        assert words["count"] == 4
+        assert execute_logic_computation("splitTextNode", {"text": "   "}, {"mode": "whitespace"})["list"] == []
+        lines = execute_logic_computation("splitTextNode", {"text": "one\r\ntwo\nthree"}, {"mode": "lines"})
+        assert lines["list"] == ["one", "two", "three"]
+        assert execute_logic_computation("splitTextNode", {"text": ""}, {"mode": "lines"})["list"] == []
+        # Graphs saved without the config key keep the original delimiter behaviour.
+        out = execute_logic_computation("splitTextNode", {"text": "a b,c", "delimiter": ","}, {})
+        assert out["list"] == ["a b", "c"]
+
     def test_joins_a_list_with_a_delimiter(self):
         out = execute_logic_computation("joinTextNode", {"list": [1, 2, 3], "delimiter": "-"}, {})
         assert out["out"] == "1-2-3"
@@ -298,6 +312,61 @@ class TestListsCategory:
         out = execute_logic_computation("listContainsNode", {"list": [1, 2, 3], "value": "2"}, {})
         assert out["out"] is True
         assert out["index"] == 1
+
+    def test_ranks_entries_most_frequent_first_breaking_ties_by_first_appearance(self):
+        # "b" and "c" both appear twice; "b" is first in the input, so it ranks first.
+        out = execute_logic_computation(
+            "listFrequencyNode", {"list": ["a", "b", "c", "b", "c", "a", "a"]}, {}
+        )
+        assert out["values"] == ["a", "b", "c"]
+        assert out["counts"] == [3, 2, 2]
+        assert out["unique"] == 3
+
+    def test_groups_case_insensitively_by_default(self):
+        folded = execute_logic_computation("listFrequencyNode", {"list": ["The", "the", "THE", "cat"]}, {})
+        assert folded["values"] == ["The", "cat"]
+        assert folded["counts"] == [3, 1]
+        exact = execute_logic_computation(
+            "listFrequencyNode", {"list": ["The", "the", "THE", "cat"]}, {"caseSensitive": True}
+        )
+        assert exact["counts"] == [1, 1, 1, 1]
+        assert exact["unique"] == 4
+
+    def test_drops_entries_below_min_count_and_truncates_to_top_n(self):
+        items = ["a", "a", "a", "b", "b", "c"]
+        assert execute_logic_computation("listFrequencyNode", {"list": items}, {"minCount": 2})["values"] == ["a", "b"]
+        top = execute_logic_computation("listFrequencyNode", {"list": items}, {"topN": 1})
+        assert top["values"] == ["a"]
+        # Unique always counts the whole input, not just the entries kept.
+        assert top["unique"] == 3
+
+    def test_renders_a_ready_to_display_report(self):
+        out = execute_logic_computation("listFrequencyNode", {"list": ["red", "blue", "red"]}, {})
+        assert out["report"] == "red: 2\nblue: 1"
+        assert execute_logic_computation("listFrequencyNode", {"list": []}, {})["report"] == ""
+
+    def test_groups_non_strings_by_the_shared_stringification(self):
+        out = execute_logic_computation("listFrequencyNode", {"list": [1, "1", 2, True]}, {})
+        assert out["values"] == [1, 2, True]
+        assert out["counts"] == [2, 1, 1]
+
+    def test_dedupes_preserving_first_seen_order(self):
+        out = execute_logic_computation("listUniqueNode", {"list": ["b", "a", "B", "c", "a"]}, {})
+        assert out["out"] == ["b", "a", "c"]
+        assert out["count"] == 3
+        exact = execute_logic_computation("listUniqueNode", {"list": ["b", "B"]}, {"caseSensitive": True})
+        assert exact["out"] == ["b", "B"]
+
+    def test_counts_how_many_times_one_item_occurs(self):
+        assert execute_logic_computation(
+            "listCountItemNode", {"list": ["a", "B", "b"], "item": "b"}, {}
+        )["count"] == 2
+        assert execute_logic_computation(
+            "listCountItemNode", {"list": ["a", "B", "b"], "item": "b"}, {"caseSensitive": True}
+        )["count"] == 1
+        # Loose text comparison: a wired number matches a typed "2".
+        assert execute_logic_computation("listCountItemNode", {"list": [1, 2, 2], "item": "2"}, {})["count"] == 2
+        assert execute_logic_computation("listCountItemNode", {"list": ["a"], "item": "z"}, {})["count"] == 0
 
     def test_republishes_the_accumulated_append_buffer(self):
         out = execute_logic_computation("listAppendNode", {}, {"items": [1, 2]})

@@ -4,7 +4,7 @@ import {
   Ampersand, Equal, Parentheses, CircleDot, Lock,
   Calculator, SquareFunction, Percent, Ruler, MoveHorizontal, Blend, ArrowLeftRight, Dices,
   Split, Merge, Scissors, FileJson, Binary, Quote, Regex, Search, CaseUpper, Filter,
-  ListPlus, ListOrdered, Target, Sigma, ArrowUpDown, Crop,
+  ListPlus, ListOrdered, Target, Sigma, ArrowUpDown, Crop, BarChart3, Fingerprint, Tally5,
   GitBranch, Timer, Repeat, Milestone, SkipForward, DoorOpen, CornerDownRight, Shuffle,
   Terminal, Gauge, CheckCheck, FileCode, Table2,
   Bot, Eye, Zap, Waypoints, Link2, TrendingUp, Activity,
@@ -71,6 +71,9 @@ const NODE_ICONS: Record<string, React.ComponentType<{ size?: number | string; c
   listSortNode: ArrowUpDown,
   listSliceNode: Crop,
   listContainsNode: Search,
+  listFrequencyNode: BarChart3,
+  listUniqueNode: Fingerprint,
+  listCountItemNode: Tally5,
 
   // Control Flow
   ifElseTrigger: GitBranch,
