@@ -37,6 +37,11 @@ flowchart LR
 
 ---
 
+## Recent Fixes
+
+- **Counter state is now serialized per node** so rapid repeated trigger pulses no longer overwrite earlier increments/decrements. Stateful nodes such as the Counter now accumulate correctly across fast back-to-back events instead of getting stuck at 0 or 1.
+- **Hybrid data-to-trigger wiring is handled with rising-edge detection** so a boolean/number source only fires when it transitions from off to on, not on every re-evaluation.
+
 ## Executive Summary
 
 LogiTensor is a visual, node-based programming environment: logic gates, control flow, math, text processing, and small real neural-network layers all become draggable nodes on a canvas, wired together and executed live. It solves the same core problem as tools like Node-RED or n8n — making control flow and data flow *visible* instead of buried in text — but pushes further into two areas most visual-programming tools don't touch: workflows that are genuinely **multi-dimensional** (parallel workspaces that stack and link, not just one flat canvas), and node types that perform **real, inspectable machine-learning math** (a Dense Layer's weights, a Conv1D Layer's receptive fields) rather than only calling out to an opaque model API.

@@ -79,6 +79,19 @@ describe("hybrid trigger port smoke test (store-level)", () => {
     expect(countOf(counterId)).toBe(1);
   });
 
+  it("accumulates count across rapid repeated trigger firings", async () => {
+    const counterId = addAt("counterNode", 200, 0);
+    const store = useNodeEditorStore.getState();
+
+    await Promise.all([
+      store.triggerNode(counterId, "incTrigger"),
+      store.triggerNode(counterId, "incTrigger"),
+      store.triggerNode(counterId, "incTrigger"),
+    ]);
+
+    expect(countOf(counterId)).toBe(3);
+  });
+
   it("treats a positive number as on and zero as off for a trigger port", async () => {
     const numId = addAt("constNum", 0, 0);
     const counterId = addAt("counterNode", 200, 0);

@@ -20,6 +20,27 @@ import { logEvent } from "@/lib/debug-log";
 type Setter = StoreApi<NodeEditorState>["setState"];
 type Getter = StoreApi<NodeEditorState>["getState"];
 
+const pendingTriggerRuns = new Map<string, Promise<void>>();
+
+async function runSerializedTrigger(key: string, task: () => Promise<void>) {
+  const previous = pendingTriggerRuns.get(key) ?? Promise.resolve();
+  let release: (() => void) | undefined;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  pendingTriggerRuns.set(key, previous.then(() => current, () => current));
+
+  await previous;
+  try {
+    await task();
+  } finally {
+    release?.();
+    if (pendingTriggerRuns.get(key) === current) {
+      pendingTriggerRuns.delete(key);
+    }
+  }
+}
+
 /**
  * Runs one trigger edge: animates the wire, honors breakpoints/pause, executes
  * the target node, then continues down whatever that node fires next. Split out
@@ -287,19 +308,21 @@ export const createExecutionSlice = (set: Setter, get: Getter) => ({
   // use edges.find() — singular — so wiring one trigger to two nodes silently
   // ran only the first (e.g. two Random generators, only one firing).
   triggerNode: async (nodeId: string, outputPortId: string) => {
-    const fanOut = get().edges.filter(
-      (e) => e.source === nodeId && e.sourceHandle === outputPortId
-    );
-    if (fanOut.length > 1) {
-      logEvent(
-        "debug",
-        "exec",
-        `Trigger fan-out: ${nodeLabelOf(get, nodeId)}.${outputPortId} → ${fanOut.length} targets`
+    await runSerializedTrigger(`trigger:${nodeId}`, async () => {
+      const fanOut = get().edges.filter(
+        (e) => e.source === nodeId && e.sourceHandle === outputPortId
       );
-    }
-    for (const edge of fanOut) {
-      await fireTriggerEdge(get, set, nodeId, outputPortId, edge);
-    }
+      if (fanOut.length > 1) {
+        logEvent(
+          "debug",
+          "exec",
+          `Trigger fan-out: ${nodeLabelOf(get, nodeId)}.${outputPortId} → ${fanOut.length} targets`
+        );
+      }
+      for (const edge of fanOut) {
+        await fireTriggerEdge(get, set, nodeId, outputPortId, edge);
+      }
+    });
   },
 
   // Fires a trigger input port directly — no trigger edge required. Used
@@ -309,46 +332,48 @@ export const createExecutionSlice = (set: Setter, get: Getter) => ({
   // trigger wire to animate (the causing data edge is already lit by
   // evaluateNode's own data-edge styling).
   fireTriggerInput: async (nodeId: string, portId: string) => {
-    if (!get().nodes.some((n) => n.id === nodeId)) return;
+    await runSerializedTrigger(`trigger:${nodeId}`, async () => {
+      if (!get().nodes.some((n) => n.id === nodeId)) return;
 
-    logEvent("debug", "exec", `Rising edge fired: ${nodeLabelOf(get, nodeId)}.${portId}`);
+      logEvent("debug", "exec", `Rising edge fired: ${nodeLabelOf(get, nodeId)}.${portId}`);
 
-    // Breakpoints apply to data-driven trigger fires too, not just wired ones.
-    await breakpointGate(get, set, nodeId);
+      // Breakpoints apply to data-driven trigger fires too, not just wired ones.
+      await breakpointGate(get, set, nodeId);
 
-    set((state) => ({
-      nodes: state.nodes.map((n) =>
-        n.id === nodeId ? { ...n, data: { ...n.data, executionState: "running" as const } } : n
-      ),
-    }));
+      set((state) => ({
+        nodes: state.nodes.map((n) =>
+          n.id === nodeId ? { ...n, data: { ...n.data, executionState: "running" as const } } : n
+        ),
+      }));
 
-    const { nextTriggerPort, status, errorMsg } = await runTriggerLogic(get, set, nodeId, portId);
+      const { nextTriggerPort, status, errorMsg } = await runTriggerLogic(get, set, nodeId, portId);
 
-    if (status === "error") {
-      logEvent("error", "exec", `Trigger failed: ${nodeLabelOf(get, nodeId)}`, errorMsg);
-    }
+      if (status === "error") {
+        logEvent("error", "exec", `Trigger failed: ${nodeLabelOf(get, nodeId)}`, errorMsg);
+      }
 
-    set((state) => ({
-      nodes: state.nodes.map((n) =>
-        n.id === nodeId
-          ? {
-              ...n,
-              data: {
-                ...n.data,
-                executionState: status,
-                errorMessage: errorMsg || undefined,
-                lastExecuted: new Date().toISOString(),
-              },
-            }
-          : n
-      ),
-    }));
+      set((state) => ({
+        nodes: state.nodes.map((n) =>
+          n.id === nodeId
+            ? {
+                ...n,
+                data: {
+                  ...n.data,
+                  executionState: status,
+                  errorMessage: errorMsg || undefined,
+                  lastExecuted: new Date().toISOString(),
+                },
+              }
+            : n
+        ),
+      }));
 
-    get().evaluateNode(nodeId);
+      get().evaluateNode(nodeId);
 
-    if (nextTriggerPort && status === "success") {
-      await get().triggerNode(nodeId, nextTriggerPort);
-    }
+      if (nextTriggerPort && status === "success") {
+        await get().triggerNode(nodeId, nextTriggerPort);
+      }
+    });
   },
 
   // Backend compile + run lives in run-all-backend.ts (500-line guardrail).
