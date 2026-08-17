@@ -3,8 +3,15 @@ from typing import Any, Dict, List, Set
 from langgraph.graph import StateGraph
 
 from backend.engine.state import GraphState, ACTIVE_TYPES
-from backend.engine.helpers import _is_trigger_handle
-from backend.engine.active import run_trigger_chain
+from backend.engine.helpers import _is_trigger_edge
+from backend.engine.active import run_entry_point
+
+# LangGraph's default recursion limit is 25 supersteps. Entry points are
+# chained linearly (one LangGraph node each), so a board with many entries
+# needs a proportionally larger budget or the whole run fails with
+# "Recursion limit of 25 reached without hitting a stop condition".
+RECURSION_HEADROOM = 50
+
 
 
 def _trigger_adjacency(trigger_edges: List[Dict[str, Any]], active_ids: Set[str]) -> Dict[str, List[str]]:
@@ -37,17 +44,17 @@ def _body_owned_ids(trigger_edges: List[Dict[str, Any]], active_ids: Set[str]) -
     return owned
 
 
-def _data_dependency_order(node_ids: List[str], edges_json: List[Dict[str, Any]]) -> List[str]:
+def _data_dependency_order(node_ids: List[str], data_edges: List[Dict[str, Any]]) -> List[str]:
     """Sorts nodes so anything reading another's data output comes after it.
 
     Depth is measured through DATA edges only, and through intervening passive
     nodes, so a Text Output reading a Math Function that reads two Random
-    Numbers sorts after both of them.
+    Numbers sorts after both of them. Hybrid data→trigger edges are excluded by
+    the caller: they fire their target, they don't feed it a value, so counting
+    them here would both mis-order entries and invent data cycles.
     """
     preds: Dict[str, List[str]] = {}
-    for edge in edges_json:
-        if _is_trigger_handle(edge.get("sourceHandle")):
-            continue
+    for edge in data_edges:
         preds.setdefault(edge.get("target"), []).append(edge.get("source"))
 
     cache: Dict[str, int] = {}
@@ -84,9 +91,13 @@ async def compile_and_run_graph(nodes_json: List[Any], edges_json: List[Any]) ->
     step, so the plain-TypedDict LastValue channels can never see concurrent
     writes.
     """
+    nodes_by_id = {n["id"]: n for n in nodes_json}
     active_nodes = [n for n in nodes_json if n.get("type") in ACTIVE_TYPES]
     active_ids = {n["id"] for n in active_nodes}
-    trigger_edges = [e for e in edges_json if _is_trigger_handle(e.get("sourceHandle"))]
+    # Trigger vs data is decided by the TARGET port, so a hybrid data→trigger
+    # wire counts as a trigger edge here — its target is driven, not orphaned.
+    trigger_edges = [e for e in edges_json if _is_trigger_edge(e, nodes_by_id)]
+    data_edges = [e for e in edges_json if not _is_trigger_edge(e, nodes_by_id)]
 
     # 1. Entry points. Manual Triggers come first, in authoring order.
     body_owned = _body_owned_ids(trigger_edges, active_ids)
@@ -109,7 +120,14 @@ async def compile_and_run_graph(nodes_json: List[Any], edges_json: List[Any]) ->
     # wired purely with data edges (say two Random Numbers feeding a Math
     # Function) ran exactly ONE node — the old fallback took `[:1]` — and
     # everything else was reported as "skipped". Run means run the board.
-    driven = {e["target"] for e in trigger_edges if e.get("target") in active_ids}
+    # Driven means some node that actually EXECUTES fires it. A hybrid
+    # data→trigger wire from a passive source (a Boolean constant into a
+    # Counter's Inc) drives nothing on its own, so its target stays an entry
+    # point — run_entry_point resolves the wire and decides whether it fires.
+    driven = {
+        e["target"] for e in trigger_edges
+        if e.get("target") in active_ids and e.get("source") in active_ids
+    }
     reachable = _reach(entries)
     orphans = [
         n["id"] for n in active_nodes
@@ -118,7 +136,7 @@ async def compile_and_run_graph(nodes_json: List[Any], edges_json: List[Any]) ->
     # Producers must run before consumers, or a consumer would resolve an
     # upstream active node on demand and (for Random Number) get a different
     # value than the one that node publishes when it runs itself.
-    entries += _data_dependency_order(orphans, edges_json)
+    entries += _data_dependency_order(orphans, data_edges)
 
     if not entries:
         return {"success": True, "logs": ["No active execution nodes found."], "outputs": {}, "trace": []}
@@ -139,7 +157,7 @@ async def compile_and_run_graph(nodes_json: List[Any], edges_json: List[Any]) ->
     for entry_id in entries:
         def make_entry(eid=entry_id):
             async def entry_func(state):
-                await run_trigger_chain(eid, state)
+                await run_entry_point(eid, state)
                 return state
             return entry_func
         workflow.add_node(entry_id, make_entry())
@@ -158,10 +176,14 @@ async def compile_and_run_graph(nodes_json: List[Any], edges_json: List[Any]) ->
         "error": "",
         "active_node": "",
         "trace": [],
+        "next_ports": {},
     }
 
+    # One superstep per entry, plus headroom for LangGraph's own bookkeeping.
+    recursion_limit = len(entries) + RECURSION_HEADROOM
+
     try:
-        final_state = await app.ainvoke(initial_state)
+        final_state = await app.ainvoke(initial_state, config={"recursion_limit": recursion_limit})
         return {
             "success": True,
             "logs": final_state["logs"],
@@ -169,8 +191,15 @@ async def compile_and_run_graph(nodes_json: List[Any], edges_json: List[Any]) ->
             "trace": final_state.get("trace", []),
         }
     except Exception as e:
+        message = str(e)
+        if "recursion limit" in message.lower():
+            message = (
+                f"{message} (the run was given {recursion_limit} supersteps for "
+                f"{len(entries)} entry point(s) — a graph this large needs a bigger budget)"
+            )
+        initial_state["logs"].append(f"Run failed :: {message}")
         return {
             "success": False,
             "logs": initial_state["logs"],
-            "error": str(e),
+            "error": message,
         }

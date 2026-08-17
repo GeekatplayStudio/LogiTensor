@@ -92,6 +92,8 @@ export interface RunReport {
   edgeCount: number;
   lastRun?: LastRunInfo;
   trace: TraceStep[];
+  /** nodes that ran before a node whose data they consume */
+  orderWarnings: string[];
   neverExecuted: UnexecutedNode[];
   duplicateTypes: DuplicateTypeGroup[];
   nodeDetails: NodeDetail[];
@@ -281,6 +283,7 @@ export function buildRunReport(input: RunReportInput): RunReport {
     edgeCount: edges.length,
     ...(lastRun ? { lastRun } : {}),
     trace: traceSteps,
+    orderWarnings: auditExecutionOrder(nodes, edges, trace),
     neverExecuted,
     duplicateTypes,
     nodeDetails,
@@ -289,6 +292,41 @@ export function buildRunReport(input: RunReportInput): RunReport {
     backendLogs: lastRun?.backendLogs ?? [],
     debugLog,
   };
+}
+
+/**
+ * Flags a node that executed BEFORE a node whose data output it consumes.
+ * When that happens the consumer read a stale value — or, worse, forced the
+ * producer to be resolved on demand, so a Random Number can publish one value
+ * while its consumer saw a different one. Cheap to detect, and it points
+ * straight at an execution-ordering bug rather than at the nodes themselves.
+ */
+export function auditExecutionOrder(
+  nodes: Node<NodeData>[],
+  edges: Edge[],
+  trace: string[]
+): string[] {
+  const firstRun = new Map<string, number>();
+  trace.forEach((id, i) => {
+    if (!firstRun.has(id)) firstRun.set(id, i);
+  });
+  const labelOf = (id: string) => nodes.find((n) => n.id === id)?.data.label ?? id;
+
+  const warnings: string[] = [];
+  for (const edge of edges) {
+    const consumer = firstRun.get(edge.target);
+    const producer = firstRun.get(edge.source);
+    // Only meaningful when BOTH actually ran: a producer that never appears
+    // in the trace is a passive node, resolved on demand by design.
+    if (consumer === undefined || producer === undefined) continue;
+    if (producer > consumer) {
+      warnings.push(
+        `${labelOf(edge.target)} ran at step ${consumer + 1} but reads ${labelOf(edge.source)}.${edge.sourceHandle}, ` +
+          `which did not run until step ${producer + 1} — it saw a stale value.`
+      );
+    }
+  }
+  return warnings;
 }
 
 function iso(ms: number): string {
@@ -330,6 +368,13 @@ export function formatRunReportMarkdown(report: RunReport): string {
     for (const s of r.trace) out.push(`| ${s.step} | ${s.nodeId} | ${s.type} | ${s.label} |`);
   }
   out.push("");
+
+  if (r.orderWarnings.length > 0) {
+    out.push("## Execution-order problems");
+    out.push("");
+    for (const w of r.orderWarnings) out.push(`- ${w}`);
+    out.push("");
+  }
 
   out.push("## Declared but never executed");
   out.push("");

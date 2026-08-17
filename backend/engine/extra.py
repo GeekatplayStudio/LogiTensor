@@ -151,7 +151,8 @@ EXTRA_COMPUTE = {
     "textAreaInput": lambda _inputs, config: {"value": str(config.get("value", "") or "")},
     "currentTimeNode": _current_time,
     "xnorGate": lambda inputs, _config: {"out": bool(inputs.get("a")) == bool(inputs.get("b"))},
-    # Stateful gates: state is frontend-owned in config; reflect it as-is.
+    # Stateful gates: the state lives in config (mutated on a trigger fire by
+    # backend/engine/trigger_state.py); the pure pass republishes it.
     "toggleNode": lambda _inputs, config: {"state": bool(config.get("state"))},
     "latchNode": lambda _inputs, config: {"state": bool(config.get("state"))},
     "clampNode": _clamp,

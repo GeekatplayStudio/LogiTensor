@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { Edge, Node } from "@xyflow/react";
 import type { NodeData } from "@/types/nodes";
 import { NODE_DEFINITIONS } from "@/types/nodes";
-import { buildRunReport, formatRunReportMarkdown, type LastRunInfo } from "../run-report";
+import { auditExecutionOrder, buildRunReport, formatRunReportMarkdown, type LastRunInfo } from "../run-report";
 
 function makeNode(type: string, id: string, label?: string): Node<NodeData> {
   const def = NODE_DEFINITIONS[type];
@@ -126,5 +126,48 @@ describe("formatRunReportMarkdown", () => {
     const md = formatRunReportMarkdown(report);
     expect(md).toContain("INFO: graph compiled");
     expect(md).toContain("[info/exec] hello");
+  });
+});
+
+describe("execution-order audit", () => {
+  it("flags a consumer that ran before its producer", () => {
+    // The exact shape seen in a real report: Range executed at step 1 but
+    // reads Random Number, which did not run until step 4 — so Range checked
+    // a value the Random node never published.
+    const warnings = auditExecutionOrder(
+      [
+        makeNode("randomNode", "rand", "Random Number"),
+        makeNode("rangeNode", "range", "Range"),
+      ],
+      [{ id: "e1", source: "rand", sourceHandle: "value", target: "range", targetHandle: "value" }],
+      ["range", "rand"]
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/Range ran at step 1/);
+    expect(warnings[0]).toMatch(/Random Number/);
+  });
+
+  it("stays quiet when the producer ran first", () => {
+    const warnings = auditExecutionOrder(
+      [
+        makeNode("randomNode", "rand", "Random Number"),
+        makeNode("rangeNode", "range", "Range"),
+      ],
+      [{ id: "e1", source: "rand", sourceHandle: "value", target: "range", targetHandle: "value" }],
+      ["rand", "range"]
+    );
+    expect(warnings).toHaveLength(0);
+  });
+
+  it("ignores passive producers that never appear in the trace", () => {
+    const warnings = auditExecutionOrder(
+      [
+        makeNode("constNum", "c", "Constant Number"),
+        makeNode("rangeNode", "range", "Range"),
+      ],
+      [{ id: "e1", source: "c", sourceHandle: "value", target: "range", targetHandle: "value" }],
+      ["range"]
+    );
+    expect(warnings).toHaveLength(0);
   });
 });

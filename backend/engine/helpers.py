@@ -5,11 +5,49 @@ from backend.engine.lists import LIST_BYPASS_PORTS
 
 
 def _is_trigger_handle(handle) -> bool:
+    """Name-based guess at whether a handle is a trigger port. Only a fallback
+    for edges whose endpoints don't declare the port (hand-written graphs and
+    older saves) — prefer the declaration-based helpers below."""
     return bool(handle) and (
         str(handle).endswith("Trigger")
         # out1/out2/out3 are the Sequence node's ordered trigger outputs.
         or handle in ("triggerOut", "outTrigger", "onTrue", "onFalse", "done", "loopBody", "spike", "out1", "out2", "out3")
     )
+
+
+def _port_kind(node, port_key: str, handle):
+    """The declared type ('trigger' / 'data') of a port on `node`, or None when
+    the node doesn't declare it."""
+    if not node:
+        return None
+    for port in (node.get("data", {}).get(port_key) or []):
+        if port.get("id") == handle:
+            return port.get("type")
+    return None
+
+
+def _is_trigger_edge(edge, nodes) -> bool:
+    """An edge is a trigger edge when its TARGET port is a trigger input.
+
+    Classifying by the target (rather than by the source handle's name) is what
+    makes the frontend's "hybrid trigger" connection visible here: a boolean or
+    number DATA output may be wired straight into a trigger INPUT (see onConnect
+    in src/components/node-editor/store/graph-slice.ts), and such an edge fires
+    its target even though its source handle is called `value` or `above`.
+    """
+    kind = _port_kind(nodes.get(edge.get("target")), "inputs", edge.get("targetHandle"))
+    if kind is not None:
+        return kind == "trigger"
+    return _is_trigger_handle(edge.get("sourceHandle"))
+
+
+def _is_data_source(edge, nodes) -> bool:
+    """True when the edge leaves a DATA output — i.e. if it also lands on a
+    trigger input it is a hybrid data→trigger connection, not a trigger wire."""
+    kind = _port_kind(nodes.get(edge.get("source")), "outputs", edge.get("sourceHandle"))
+    if kind is not None:
+        return kind == "data"
+    return not _is_trigger_handle(edge.get("sourceHandle"))
 
 
 def _coerce_operand(v):

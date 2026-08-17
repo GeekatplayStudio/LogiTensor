@@ -6,9 +6,25 @@ from typing import Any, Dict, List
 import ollama
 
 from backend.security import validate_python_code
-from backend.engine.state import GraphState, LOOP_TYPES
-from backend.engine.helpers import _is_trigger_handle, _condition_flag, _clear_passive_cache
-from backend.engine.passive import resolve_inputs, execute_logic_computation
+from backend.engine.state import GraphState, ACTIVE_TYPES, LOOP_TYPES
+from backend.engine.helpers import (
+    _condition_flag,
+    _clear_passive_cache,
+    _is_data_source,
+    _is_trigger_edge,
+)
+from backend.engine.passive import (
+    evaluate_passive_node,
+    resolve_inputs,
+    execute_logic_computation,
+)
+from backend.engine.trigger_state import (
+    DEFAULT_PORTS,
+    TRIGGER_STATE_TYPES,
+    apply_trigger_state,
+    reflect_state_outputs,
+    resolve_trigger_fire,
+)
 
 
 def _loop_body_edges(node_id: str, state: GraphState) -> List[Dict[str, Any]]:
@@ -20,10 +36,14 @@ def _loop_body_edges(node_id: str, state: GraphState) -> List[Dict[str, Any]]:
     ]
 
 
-async def run_node_task(node_id: str, state: GraphState) -> GraphState:
+async def run_node_task(node_id: str, state: GraphState, fired_port: str = None) -> GraphState:
     """
     Executes a single node, resolving inputs, running computations
     or external API calls, updating outputs, and appending logs.
+
+    `fired_port` is the trigger INPUT handle that caused this execution (None
+    for an entry point nothing drove). Stateful nodes need it: a Counter fired
+    on Inc counts up, on Dec counts down, on Reset zeroes.
     """
     node = state["nodes"][node_id]
     node_type = node["type"]
@@ -111,26 +131,23 @@ async def run_node_task(node_id: str, state: GraphState) -> GraphState:
             outputs["value"] = val
             state["logs"].append(f"Generated random value: {val} (range: {min_val} to {max_val})")
 
-        # 5. Incremental Counter update
-        elif node_type == "counterNode":
-            # Values are updated on the frontend when trigger flow hits it.
-            # Here we just resolve its output count.
-            outputs["count"] = int(config.get("count", 0))
-
-        # 5.1. Range check — recompute inRange/above/below fresh (pure), but
-        # like counterNode above, count is mutated on the frontend when a
-        # trigger fires (Check vs Reset) and this stub can't tell which of
-        # its two trigger ports fired, so it just reflects the current count.
-        elif node_type == "rangeNode":
-            value = float(inputs.get("value", 0) or 0)
-            min_val = float(config.get("min", 0) or 0)
-            max_val = float(config.get("max", 0) or 0)
-            in_range = min_val <= value <= max_val
-            outputs["above"] = value > max_val
-            outputs["below"] = value < min_val
-            outputs["inRange"] = in_range
-            outputs["count"] = int(config.get("count", config.get("initialCount", 0)) or 0)
-            state["logs"].append(f"Range check: value={value} in [{min_val}, {max_val}] -> {in_range}")
+        # 5. Trigger-driven stateful nodes (Counter, Range, Toggle, SR Latch,
+        # List Append, Value List, Gate, Once, Sequence). Which port fired
+        # decides the state transition — see backend/engine/trigger_state.py,
+        # the mirror of handleTriggerOperation.
+        elif node_type in TRIGGER_STATE_TYPES:
+            new_config, next_ports = apply_trigger_state(node_type, inputs, config, fired_port)
+            if new_config is not None:
+                node["data"]["config"] = new_config
+                config = new_config
+                state["logs"].append(
+                    f"{node_type} '{node_id}' fired on '{fired_port}' -> {new_config}"
+                )
+            outputs = reflect_state_outputs(node_type, inputs, config, execute_logic_computation)
+            if next_ports is not DEFAULT_PORTS:
+                state.setdefault("next_ports", {})[node_id] = list(next_ports)
+            else:
+                state.setdefault("next_ports", {}).pop(node_id, None)
 
         # 5.5. Leaky integrate-and-fire neuron: integrate Input into Potential
         # (decayed by Leak each step), spiking and resetting once Threshold
@@ -155,16 +172,6 @@ async def run_node_task(node_id: str, state: GraphState) -> GraphState:
                 f"LIF neuron {node_id}: potential={potential:.3f} "
                 f"{'SPIKED' if fired else '(no spike)'}"
             )
-
-        # 5.7. Extended-library trigger nodes (Toggle, SR Latch, List Append,
-        # Value List, Gate, Once, Sequence). Following the counterNode
-        # convention, the frontend owns their stored state — the backend does
-        # not re-derive it (it can't tell which of several trigger ports
-        # fired), it only reflects the current config through the pure path.
-        elif node_type in ("toggleNode", "latchNode", "listAppendNode", "valueListNode",
-                           "gateNode", "onceNode", "sequenceNode"):
-            outputs = execute_logic_computation(node_type, inputs, config)
-            state["logs"].append(f"{node_type} '{node_id}' reflecting stored state: {outputs}")
 
         # 6. Console Log collector
         elif node_type == "loggerNode":
@@ -198,7 +205,9 @@ async def run_node_task(node_id: str, state: GraphState) -> GraphState:
                 state["outputs"][node_id] = dict(outputs)
                 _clear_passive_cache(state)
                 for body_edge in body_edges:
-                    await run_trigger_chain(body_edge["target"], state)
+                    await run_trigger_chain(
+                        body_edge["target"], state, fired_port=body_edge.get("targetHandle")
+                    )
             state["logs"].append(f"For Loop completed {count} iterations.")
 
         # 6.8 While Loop: run the Body chain while Condition stays true
@@ -215,7 +224,9 @@ async def run_node_task(node_id: str, state: GraphState) -> GraphState:
                 if not _condition_flag(cond_val, state):
                     break
                 for body_edge in body_edges:
-                    await run_trigger_chain(body_edge["target"], state)
+                    await run_trigger_chain(
+                        body_edge["target"], state, fired_port=body_edge.get("targetHandle")
+                    )
                 iteration += 1
             if iteration >= 1000:
                 state["logs"].append("While Loop stopped: 1000-iteration safety cap reached.")
@@ -247,32 +258,48 @@ def next_trigger_edges(node_id: str, state: GraphState) -> List[Dict[str, Any]]:
     is what makes that work.
 
     Which port fires is node-type dependent: If/Else picks one branch, loops
-    continue from Done (their Body already ran inside run_node_task), and an
-    LIF neuron only continues down Spike when it actually fired.
+    continue from Done (their Body already ran inside run_node_task), an LIF
+    neuron only continues down Spike when it actually fired, and the stateful
+    nodes (Gate, Once, Sequence) recorded their choice in `state["next_ports"]`.
+
+    Hybrid data→trigger edges count too: a DATA output wired into a trigger
+    INPUT fires that target when its value reads as "on". The frontend fires
+    those on a RISING edge (it remembers each port's previous value across
+    interactive steps); one stateless backend pass has no previous value, so
+    this is level-triggered — the faithful approximation of a single run.
     """
-    ntype = (state["nodes"].get(node_id) or {}).get("type")
+    nodes = state["nodes"]
+    ntype = (nodes.get(node_id) or {}).get("type")
     edges = state["edges"]
 
-    if ntype == "ifElseTrigger":
+    chosen = state.get("next_ports", {}).get(node_id)
+    if chosen is not None:
+        handles = set(chosen)
+    elif ntype == "ifElseTrigger":
         cond_val = resolve_inputs(node_id, state).get("condition", False)
-        branch = "onTrue" if _condition_flag(cond_val, state) else "onFalse"
-        handles = {branch}
+        handles = {"onTrue" if _condition_flag(cond_val, state) else "onFalse"}
     elif ntype in LOOP_TYPES:
         handles = {"done"}
     elif ntype == "leakyIntegrateFire":
-        # Silent neuron: the chain simply stops here.
-        if not state["outputs"].get(node_id, {}).get("_spiked", False):
-            return []
-        handles = {"spike"}
+        # Silent neuron: the trigger chain stops here (data still propagates).
+        handles = {"spike"} if state["outputs"].get(node_id, {}).get("_spiked", False) else set()
     else:
-        return [
-            e for e in edges
-            if e.get("source") == node_id
-            and _is_trigger_handle(e.get("sourceHandle"))
-            and e.get("sourceHandle") != "loopBody"
-        ]
+        handles = None  # every wired trigger output
 
-    return [e for e in edges if e.get("source") == node_id and e.get("sourceHandle") in handles]
+    result = []
+    for edge in edges:
+        if edge.get("source") != node_id or not _is_trigger_edge(edge, nodes):
+            continue
+        if _is_data_source(edge, nodes):
+            if resolve_trigger_fire(state["outputs"].get(node_id, {}).get(edge.get("sourceHandle"))):
+                result.append(edge)
+            continue
+        handle = edge.get("sourceHandle")
+        if handle == "loopBody":
+            continue
+        if handles is None or handle in handles:
+            result.append(edge)
+    return result
 
 
 async def run_trigger_chain(
@@ -281,6 +308,7 @@ async def run_trigger_chain(
     max_steps: int = 5000,
     _budget: Dict[str, int] = None,
     _path: List[str] = None,
+    fired_port: str = None,
 ) -> None:
     """
     Executes a trigger chain sequentially, depth-first, in edge order — the
@@ -306,7 +334,7 @@ async def run_trigger_chain(
     budget = _budget if _budget is not None else {"steps": 0}
     path = _path if _path is not None else []
     entered = 0
-    current = start_id
+    current, current_port = start_id, fired_port
 
     try:
         while current:
@@ -324,7 +352,7 @@ async def run_trigger_chain(
                 return
             budget["steps"] += 1
 
-            await run_node_task(current, state)
+            await run_node_task(current, state, current_port)
             path.append(current)
             entered += 1
 
@@ -334,7 +362,37 @@ async def run_trigger_chain(
             # All but the last branch recurse; the last continues this loop so
             # straight chains stay iterative.
             for edge in nxts[:-1]:
-                await run_trigger_chain(edge["target"], state, max_steps, budget, path)
-            current = nxts[-1]["target"]
+                await run_trigger_chain(
+                    edge["target"], state, max_steps, budget, path, edge.get("targetHandle")
+                )
+            current, current_port = nxts[-1]["target"], nxts[-1].get("targetHandle")
     finally:
         del path[len(path) - entered:]
+
+
+async def run_entry_point(entry_id: str, state: GraphState) -> None:
+    """
+    Starts a chain at a top-level entry point.
+
+    An entry may be driven purely by hybrid data→trigger wires whose sources
+    are PASSIVE nodes (a Boolean constant into a Counter's Inc, say). Nothing
+    ever executes those sources, so the entry resolves them itself and fires
+    once per wire that reads as "on" — and does not run at all when none do,
+    which is what makes `constBool(false) -> counter.incTrigger` correctly do
+    nothing instead of running the counter as an undriven orphan.
+    """
+    hybrid = [
+        e for e in state["edges"]
+        if e.get("target") == entry_id
+        and state["nodes"].get(e.get("source"), {}).get("type") not in ACTIVE_TYPES
+        and _is_trigger_edge(e, state["nodes"])
+        and _is_data_source(e, state["nodes"])
+    ]
+    if not hybrid:
+        await run_trigger_chain(entry_id, state)
+        return
+
+    for edge in hybrid:
+        value = evaluate_passive_node(edge["source"], state).get(edge.get("sourceHandle"))
+        if resolve_trigger_fire(value):
+            await run_trigger_chain(entry_id, state, fired_port=edge.get("targetHandle"))

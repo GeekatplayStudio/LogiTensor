@@ -84,8 +84,8 @@ def _list_count_item(inputs, config) -> Dict[str, Any]:
 
 
 def _list_append(_inputs, config) -> Dict[str, Any]:
-    # Stateful: the appended items live in config (frontend-owned); this pure
-    # pass just republishes them.
+    # Stateful: the appended items live in config (appended on a trigger fire
+    # by backend/engine/trigger_state.py); this pure pass republishes them.
     items = to_list(config.get("items"))
     return {"list": items, "length": len(items)}
 

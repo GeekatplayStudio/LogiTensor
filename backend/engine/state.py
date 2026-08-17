@@ -13,6 +13,9 @@ class GraphState(TypedDict):
     # replays this to highlight one node at a time (paced by the Delay
     # slider) instead of flashing the whole graph green at once.
     trace: List[str]
+    # Continuation ports chosen by a node that decides for itself which of its
+    # trigger outputs fires (Gate, Once, Sequence) — node id -> handle list.
+    next_ports: Dict[str, List[str]]
 
 ACTIVE_TYPES = {
     "triggerInput",
@@ -30,8 +33,8 @@ ACTIVE_TYPES = {
     "randomNode",
     "leakyIntegrateFire",
     # Extended library: trigger-driven nodes. As with counterNode/rangeNode,
-    # their stored state is owned by the frontend — the backend only reflects
-    # whatever `config` currently holds (see run_node_task).
+    # their stored state lives in `config` and changes according to which
+    # trigger port fired (see backend/engine/trigger_state.py).
     "toggleNode",
     "latchNode",
     "listAppendNode",
