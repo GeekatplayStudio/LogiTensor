@@ -217,7 +217,9 @@ Technology was picked to fit the problem, not to look impressive on a list — h
 
 ### 7. Live Multi-Language Code Panel
 - A collapsible, resizable right-hand panel renders the current canvas graph as real source code, live, with a language dropdown: **TypeScript, JavaScript, Python, C, C++, Go, Rust, PHP**. It follows the canvas continuously — building, editing, or **loading a saved flow** repopulates it immediately.
-- **Edit mode (code → graph)**: click the pencil to detach the panel and hand-edit the source, then **Apply** to rebuild the canvas from it. Because deterministic parsers for eight languages aren't practical, Apply routes the edited code through the same local-Ollama-plus-schema-validation path as the natural-language builder — the model proposes a graph, and nothing reaches the canvas until every node type, port, and edge is verified against `NODE_DEFINITIONS`. It's a best-effort conversion by design, and says so.
+- **Build Logic (code → graph)**: click the pencil to detach the panel, paste or hand-edit *any* code, then **Build Logic** to rebuild the canvas from it. Because deterministic parsers for eight languages aren't practical, it routes the code through the same local-Ollama-plus-schema-validation path as the natural-language builder — with a code-analysis system prompt that demands a *detailed* flow (one node per meaningful step, every literal preserved, a scripting-node fallback that keeps the original code text when no catalog node fits). Nothing reaches the canvas until every node type, port, and edge is verified against `NODE_DEFINITIONS`. Edit mode has its own **model picker** and **replace/add-to-board toggle**, same as the NL bar. See [`docs/BUILD_LOGIC.md`](./docs/BUILD_LOGIC.md) for the full pipeline.
+- **Per-node verification** (`src/lib/graph-verify.ts`): before a built graph lands — and on demand via the shield button — three passes run: the wiring audit, a real **dry-run of every passive node** through `computeNodeOutputs` in data-dependency order with actual upstream values (compute throws, data cycles, and value-less nodes are flagged per node), and a codegen check on both native targets. The full findings list is narrated into the terminal.
+- **Generated tests** (flask button): captures one test per passive node from the board's live resolved values and opens the file in a **split pane below the code editor** (copy / regenerate / close). Python target → a runnable **pytest** file against the backend engine (`execute_logic_computation`); any other target → **vitest** against the TypeScript engine. Nodes that can't be covered (trigger-driven, random/time-dependent) are listed in the file footer instead of silently dropped.
 - TypeScript/JavaScript and Python are **native emitters** — one small per-node-type contract (`setup`/`loop`/`outputs`) shared across ~46 node types, so trigger chains become real `if`/loop/function statements and data wiring becomes threaded expressions, not templated strings. C/C++/Go/Rust/PHP are **derived** from the JavaScript emission through a deterministic line-adapter (rule table + honest `TODO(port by hand)` bailouts for constructs that don't map cleanly) — the same approach Geekatplay Studio's ASH-Mesh Device Logic Studio uses, extended from its original 4-language, 2-native-emitter design.
 - Syntax highlighting via `shiki`; copy-to-clipboard; any node the generator couldn't fully compile surfaces as an in-panel warning instead of silently producing wrong code.
 
@@ -231,7 +233,7 @@ Technology was picked to fit the problem, not to look impressive on a list — h
 - An orbitable WebGL scene (`@react-three/fiber` + `drei`) renders the live graph as boxes and connecting lines you can drag to orbit — running nodes glow amber, errored nodes flush red, in real time as a flow executes. The app's first genuine three.js surface, added deliberately alongside — not in place of — the existing hand-rolled SVG/Canvas2D 3D views, which stay for the scenes they already handle well.
 
 ### 10. Resizable, Collapsible Workspace
-- The palette, canvas, and code panel are three `react-resizable-panels` panes — drag any divider to resize, or drag past a panel's minimum to collapse it out of the way.
+- The palette, canvas, and code panel are three `react-resizable-panels` panes — drag any divider to resize, or drag past a panel's minimum to collapse it out of the way. When a test file is generated, the code panel splits vertically into editor-over-tests, both independently resizable.
 - The header toolbar is icon-first with hover tooltips (Run, Run Tests, Pause/Step, Loops, Delay, Reset, Clear, Save/Load, 3D Preview, Help, About) to stay compact at any panel width.
 
 ### 11. Canvas Editing
@@ -299,8 +301,9 @@ A GitHub Actions workflow (`.github/workflows/ci.yml`) runs lint, typecheck, `np
 
 [`ROADMAP.md`](./ROADMAP.md) is the design record for the multi-language code panel, natural-language builder, visual run-through testing, three.js preview, and the module-size cleanup — grounded in a full audit of this repo (and of Geekatplay Studio's ASH-Mesh Device Logic Studio, the reference for the code-generation architecture). All phases in it are implemented.
 
-## Device Lab documentation
+## Documentation
 
+- [`docs/BUILD_LOGIC.md`](./docs/BUILD_LOGIC.md) — the Build Logic pipeline: paste code → analyzed, validated, per-node-verified node graph; board verification; generated test files (vitest/pytest) in the split pane.
 - [`docs/DEVICE_LAB.md`](./docs/DEVICE_LAB.md) — the communication-layer architecture (`CommandChannel` / `DeviceTransport` / `CommandSigner`), a step-by-step guide to pairing a device, and to adding a new transport or command.
 - [`docs/SECURITY_CASE_STUDY.md`](./docs/SECURITY_CASE_STUDY.md) — a case study on consumer IoT security: what went wrong at Mirai-botnet scale and at Ring, Wyze, Verkada, and Eufy specifically, the industry baseline (OWASP IoT Top Ten / ETSI EN 303 645), how this project's design answers each failure pattern, and an honest list of what it does *not* yet do before it would be shippable hardware.
 

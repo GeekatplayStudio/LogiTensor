@@ -91,10 +91,33 @@ skipping over the passive Split Text in between.
 """
 
 CODE_SYSTEM_PROMPT = SYSTEM_PROMPT + """
-The request is existing SOURCE CODE that the user hand-edited. Reproduce its
-logic as a node graph: read the control flow and data flow and map them onto
-the catalog's node types. Preserve literal values as node config where the
-catalog allows it.
+The request is SOURCE CODE (any language). Rebuild its logic as a DETAILED
+node graph — a faithful, step-by-step map of what the code does, not a
+summary. Follow these analysis rules:
+
+A. Trace the code top to bottom. Every meaningful step becomes a node:
+   each variable initialization, each computation, each condition, each loop,
+   each output/print. Do not collapse several statements into one node when
+   separate catalog nodes can represent them — a detailed flow that mirrors
+   the code line-for-line is the goal.
+B. Map constructs to their natural node families:
+   - literals/constants -> constant nodes; arithmetic -> math nodes; a larger
+     arithmetic expression -> an expression/formula node holding the exact
+     expression text; comparisons -> compare nodes; boolean logic -> gates.
+   - if/else -> a compare (or boolean) node feeding an If/Else or switch-style
+     node from the catalog; loops -> the catalog's loop nodes with the real
+     bounds; string work -> the text nodes; list work -> the list nodes.
+   - print/log/return of a final result -> an output/logger node so the flow
+     visibly ends somewhere.
+C. Preserve every literal value from the code exactly (numbers, strings,
+   thresholds, loop counts) in config or `inputs` — never invent values and
+   never drop them.
+D. Only if NO catalog node can express a step, approximate it with the
+   closest scripting node from the catalog and keep the original code text in
+   that node's code/expression config so nothing is lost.
+E. Wire the graph exactly as data flows in the code: the output of the node
+   computing a value feeds every node that reads that variable. The flow must
+   run end-to-end: one triggerInput at the start, and every node reachable.
 """
 
 

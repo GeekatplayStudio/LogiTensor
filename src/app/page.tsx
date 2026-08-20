@@ -8,6 +8,7 @@ import Canvas from "@/components/node-editor/canvas";
 import Toolbar from "@/components/node-editor/toolbar";
 import NlInputBar from "@/components/node-editor/nl-input-bar";
 import CodePanel from "@/components/node-editor/code-panel";
+import TestPanel from "@/components/node-editor/test-panel";
 import TerminalPanel from "@/components/node-editor/terminal-panel";
 import LayersStackView from "@/components/node-editor/layers-stack-view";
 import HelpAboutModal from "@/components/node-editor/help-about-modal";
@@ -27,6 +28,7 @@ export default function Home() {
   const selectLayer = useNodeEditorStore((state) => state.selectLayer);
   const setIsLayersViewOpen = useNodeEditorStore((state) => state.setIsLayersViewOpen);
 
+  const hasTestPanel = useNodeEditorStore((state) => state.testPanel !== null);
   const [helpTab, setHelpTab] = useState<"help" | "about" | null>(null);
   const [is3DOpen, setIs3DOpen] = useState(false);
   // Imperative handle so the toolbar button can collapse/expand the terminal
@@ -145,7 +147,21 @@ export default function Home() {
         </Panel>
             <Separator className="w-1 bg-zinc-900 hover:bg-emerald-700/50 transition-colors" title="Drag to resize — drag fully right to collapse the code panel" />
             <Panel id="code" defaultSize="26%" minSize="200px" collapsible collapsedSize={0} className="h-full min-w-0">
-              <CodePanel />
+              {/* Code editor over the generated-test pane; the test pane only
+                  exists while a test file has been generated. */}
+              <Group orientation="vertical" className="h-full min-h-0">
+                <Panel id="code-editor" minSize="20%" className="min-h-0">
+                  <CodePanel />
+                </Panel>
+                {hasTestPanel && (
+                  <>
+                    <Separator className="h-1 bg-zinc-900 hover:bg-violet-700/50 transition-colors" title="Drag to resize the generated-test pane" />
+                    <Panel id="test-code" defaultSize="40%" minSize="72px" className="min-h-0">
+                      <TestPanel />
+                    </Panel>
+                  </>
+                )}
+              </Group>
             </Panel>
           </Group>
         </Panel>

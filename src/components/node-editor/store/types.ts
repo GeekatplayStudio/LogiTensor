@@ -7,7 +7,16 @@ import {
 } from "@xyflow/react";
 import { NodeData } from "@/types/nodes";
 import type { LastRunInfo } from "@/lib/run-report";
+import type { CodeLine } from "@/lib/codegen";
 import type { DeviceSlice } from "./device-slice";
+
+/** Generated test file shown in the pane below the code editor. */
+export interface TestPanelContent {
+  code: string;
+  lines: CodeLine[];
+  grammar: string;
+  target: string;
+}
 
 export interface Layer {
   id: string;
@@ -101,6 +110,10 @@ export interface NodeEditorState extends DeviceSlice {
   // Expected Value node's verdict.
   runTests: () => Promise<void>;
   resetExecutionStates: () => void;
+
+  // Generated test file pane (below the code editor); null = pane hidden.
+  testPanel: TestPanelContent | null;
+  setTestPanel: (content: TestPanelContent | null) => void;
 
   // Serialization
   saveToFile: () => void;

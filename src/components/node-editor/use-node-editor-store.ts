@@ -20,5 +20,8 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => {
     ...createExecutionSlice(set, get),
     ...createPersistenceSlice(set, get),
     ...createDeviceSlice(set),
+    // Generated test file pane — small enough to live inline (see types.ts).
+    testPanel: null,
+    setTestPanel: (content) => set({ testPanel: content }),
   };
 });

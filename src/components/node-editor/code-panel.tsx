@@ -1,7 +1,20 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { Copy, Check, Code2, Pencil, Undo2, Loader2, ArrowLeftRight, CircleOff } from "lucide-react";
+import {
+  Copy,
+  Check,
+  Code2,
+  Pencil,
+  Undo2,
+  Loader2,
+  Hammer,
+  CircleOff,
+  Replace,
+  ListPlus,
+  ShieldCheck,
+  FlaskConical,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   Select,
@@ -12,7 +25,10 @@ import {
 } from "@/components/ui/select";
 import { useNodeEditorStore } from "./use-node-editor-store";
 import { generateCode, CODE_TARGETS } from "@/lib/codegen";
-import { buildNodeSchema, materializeNlGraph } from "@/lib/nl-apply";
+import { generateTestFile } from "@/lib/codegen/testgen";
+import { buildLogicFromCode } from "@/lib/code-import";
+import { verifyGraph } from "@/lib/graph-verify";
+import { logEvent } from "@/lib/debug-log";
 import CodeViewer from "./code-viewer";
 
 /** Compact one-line rendering of a port value for the inline value chip. */
@@ -38,11 +54,16 @@ export default function CodePanel() {
   const breakpoints = useNodeEditorStore((s) => s.breakpoints);
   const toggleBreakpoint = useNodeEditorStore((s) => s.toggleBreakpoint);
   const clearBreakpoints = useNodeEditorStore((s) => s.clearBreakpoints);
+  const setTestPanel = useNodeEditorStore((s) => s.setTestPanel);
   const [target, setTarget] = useState("typescript");
   const [copied, setCopied] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [applying, setApplying] = useState(false);
+  // Build Logic options: replace vs add, and which local model analyzes the code.
+  const [buildMode, setBuildMode] = useState<"replace" | "add">("replace");
+  const [models, setModels] = useState<string[]>([]);
+  const [model, setModel] = useState("");
 
   // The node the engine is executing right now drives the active-line
   // highlight; its freshly-computed outputs are shown beside that line.
@@ -69,6 +90,25 @@ export default function CodePanel() {
     return () => clearTimeout(id);
   }, []);
 
+  // Ollama model list for Build Logic — same discovery the NL bar does, so
+  // the code path is no longer stuck on the backend's default model.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_URL}/models`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled) return;
+        setModels(d.models ?? []);
+        setModel(d.default ?? "");
+      })
+      .catch(() => {
+        /* offline backend is reported when Build Logic is pressed */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const result = useMemo(() => generateCode(nodes, edges, target), [nodes, edges, target]);
   const grammar = CODE_TARGETS.find((t) => t.id === target)?.grammar ?? "typescript";
 
@@ -84,40 +124,55 @@ export default function CodePanel() {
     setEditing(true);
   };
 
-  // Applies hand-edited source back onto the canvas. Parsing eight target
-  // languages deterministically isn't feasible, so this reuses the same
-  // local-LLM + schema-validation path as the natural-language builder:
-  // the model proposes a graph, and nothing reaches the canvas until every
-  // node type, port and edge has been checked against NODE_DEFINITIONS.
-  const applyToGraph = async () => {
+  // Build Logic: analyzes pasted/edited source with the local LLM, validates
+  // the proposal against NODE_DEFINITIONS, dry-runs every passive node and
+  // checks the regenerated code before it lands on the canvas — the whole
+  // pipeline lives in src/lib/code-import.ts, shared with tests.
+  const buildLogic = async () => {
     if (applying || !draft.trim()) return;
     setApplying(true);
     try {
-      const res = await fetch(`${API_URL}/nl-build`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: draft, schema: buildNodeSchema(), mode: "code" }),
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || data.detail || `HTTP ${res.status}`);
-
-      const { nodes: built, edges: builtEdges, problems } = materializeNlGraph(data.graph);
-      if (built.length === 0) throw new Error("No valid nodes could be read from this code.");
-
-      useNodeEditorStore.setState({ nodes: built, edges: builtEdges, dataTriggerState: {} });
-      setTimeout(() => {
-        const store = useNodeEditorStore.getState();
-        for (const n of store.nodes) store.evaluateNode(n.id);
-      }, 50);
-
-      toast.success(`Applied ${built.length} nodes, ${builtEdges.length} connections`);
-      for (const p of problems) toast.warning(p);
+      const outcome = await buildLogicFromCode(draft, { mode: buildMode, model });
+      toast.success(
+        `Built ${outcome.nodeCount} nodes, ${outcome.edgeCount} connections — ${outcome.verify.summary}`
+      );
+      for (const p of outcome.problems) toast.warning(p);
+      for (const c of outcome.connectivity) toast.warning(c);
+      for (const f of outcome.verify.findings.filter((f) => f.level === "error")) {
+        toast.error(`${f.label}: ${f.message}`);
+      }
       setEditing(false);
     } catch (err: unknown) {
-      toast.error(`Apply failed: ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`Build Logic failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setApplying(false);
     }
+  };
+
+  // On-demand verification of the current board: wiring, per-node dry-run,
+  // codegen warnings. Full findings go to the terminal; toast the verdict.
+  const verifyBoard = () => {
+    const report = verifyGraph(nodes, edges);
+    logEvent(
+      report.errors ? "error" : report.warnings ? "warn" : "success",
+      "ai",
+      `Board verification: ${report.summary}`,
+      report.findings.map((f) => `[${f.level}] ${f.label}: ${f.message}`).join("\n") || undefined
+    );
+    if (report.errors) toast.error(report.summary);
+    else if (report.warnings) toast.warning(`${report.summary} See terminal for details.`);
+    else toast.success(report.summary);
+  };
+
+  // Generates the vitest/pytest file for the current board and opens the
+  // split test pane below this panel.
+  const makeTests = () => {
+    const t = generateTestFile(nodes, edges, target);
+    setTestPanel({ code: t.code, lines: t.lines, grammar: t.grammar, target: t.target });
+    toast.success(
+      `Generated ${t.target === "python" ? "pytest" : "vitest"} tests` +
+        (t.skipped.length ? ` (${t.skipped.length} node(s) not covered — see file footer)` : "")
+    );
   };
 
   return (
@@ -146,14 +201,36 @@ export default function CodePanel() {
 
         {editing ? (
           <>
+            {models.length > 0 && (
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                disabled={applying}
+                className="h-7 max-w-[110px] text-[10px] bg-zinc-900/60 border border-zinc-800 rounded px-1 text-zinc-300 focus:outline-none focus:border-amber-700/60 cursor-pointer"
+                title="Which local Ollama model analyzes the code. Larger coder models map logic far more faithfully."
+              >
+                {models.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            )}
             <button
-              onClick={applyToGraph}
+              onClick={() => setBuildMode(buildMode === "replace" ? "add" : "replace")}
+              className="p-1.5 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition cursor-pointer"
+              title={buildMode === "replace" ? "Mode: replace board (click to switch to add)" : "Mode: add to board (click to switch to replace)"}
+            >
+              {buildMode === "replace" ? <Replace className="w-3.5 h-3.5" /> : <ListPlus className="w-3.5 h-3.5" />}
+            </button>
+            <button
+              onClick={buildLogic}
               disabled={applying}
               className="h-7 px-2 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 text-[10px] font-black uppercase tracking-wider disabled:opacity-40 transition cursor-pointer flex items-center gap-1"
-              title="Rebuild the canvas from this code (local LLM, validated against the node catalog)"
+              title="Analyze this code and rebuild it as a node flow (local LLM, validated against the node catalog, every node dry-run verified)"
             >
-              {applying ? <Loader2 className="w-3 h-3 animate-spin" /> : <ArrowLeftRight className="w-3 h-3" />}
-              Apply
+              {applying ? <Loader2 className="w-3 h-3 animate-spin" /> : <Hammer className="w-3 h-3" />}
+              Build Logic
             </button>
             <button
               onClick={() => setEditing(false)}
@@ -165,6 +242,20 @@ export default function CodePanel() {
           </>
         ) : (
           <>
+            <button
+              onClick={verifyBoard}
+              className="p-1.5 rounded text-zinc-500 hover:text-emerald-300 hover:bg-zinc-800 transition cursor-pointer"
+              title="Verify the board: wiring audit, dry-run of every node's logic, generated-code check"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={makeTests}
+              className="p-1.5 rounded text-zinc-500 hover:text-violet-300 hover:bg-zinc-800 transition cursor-pointer"
+              title={`Generate a ${target === "python" ? "pytest" : "vitest"} test file for this board (opens below)`}
+            >
+              <FlaskConical className="w-3.5 h-3.5" />
+            </button>
             {Object.keys(breakpoints).length > 0 && (
               <button
                 onClick={clearBreakpoints}
@@ -195,7 +286,7 @@ export default function CodePanel() {
       {editing && (
         <div className="shrink-0 px-2.5 py-1.5 border-b border-zinc-900 bg-amber-950/20">
           <p className="text-[9px] text-amber-500/90 leading-tight">
-            ✎ Editing — the panel has stopped following the canvas. Apply rebuilds the graph from this code.
+            ✎ Editing — paste or write any code here. Build Logic analyzes it and rebuilds it as a verified node flow.
           </p>
         </div>
       )}
