@@ -79,4 +79,8 @@ export const nodeTypes = {
   sequenceNode: CustomNode,
   valueListNode: CustomNode,
   gaugeNode: CustomNode,
+  wifiScan: CustomNode,
+  wifiConnect: CustomNode,
+  bleScan: CustomNode,
+  usbSerialSend: CustomNode,
 };

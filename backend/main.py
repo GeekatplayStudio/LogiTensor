@@ -4,8 +4,10 @@ from pydantic import BaseModel, Field
 from typing import List, Any, Dict
 from backend.execution_engine import compile_and_run_graph
 from backend.nl_builder import build_graph_from_prompt, list_models, default_model
+from backend.devicelab.routes import router as devicelab_router
 
 app = FastAPI(title="LogiTensor LangGraph Backend")
+app.include_router(devicelab_router)
 
 # Enable CORS for Next.js frontend calls
 app.add_middleware(

@@ -14,6 +14,7 @@ triggered it, so nothing may mutate.
 from typing import Any, Dict, Optional, Tuple
 
 from backend.engine.values import to_bool, to_list, to_num
+from backend.engine.device import DEVICE_TRIGGER_TYPES, device_trigger_ops
 
 SEQUENCE_PORTS = ("out1", "out2", "out3")
 
@@ -40,9 +41,11 @@ TRIGGER_STATE_TYPES = {
     "gateNode",
     "onceNode",
     "sequenceNode",
+    *DEVICE_TRIGGER_TYPES,
 }
 
 # Of those, the ones that must not mutate unless a trigger port actually fired.
+# Device Lab nodes are actions (scan/connect/send) — same rule applies.
 _STATEFUL_TYPES = TRIGGER_STATE_TYPES - {"gateNode"}
 
 TriggerResult = Tuple[Optional[Dict[str, Any]], Any]
@@ -124,6 +127,9 @@ _OPS = {
     "gateNode": _gate,
     "onceNode": _once,
     "sequenceNode": _sequence,
+    # Device Lab ops live in backend/engine/device.py (500-line guardrail);
+    # they take the DEFAULT_PORTS sentinel to avoid a circular import.
+    **device_trigger_ops(DEFAULT_PORTS),
 }
 
 

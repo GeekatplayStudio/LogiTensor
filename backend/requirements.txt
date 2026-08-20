@@ -3,3 +3,5 @@ uvicorn==0.30.1
 langgraph==0.0.69
 ollama==0.2.1
 pydantic==2.7.4
+pyserial==3.5
+esptool==4.8.1

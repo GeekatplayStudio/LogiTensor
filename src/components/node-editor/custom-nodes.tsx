@@ -22,7 +22,7 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
   const toggleNodeFederated = useNodeEditorStore((state) => state.toggleNodeFederated);
 
   // Style categories
-  let category: "Inputs" | "Logic" | "Control Flow" | "Math & Compare" | "Data & Text" | "Lists" | "Outputs" | "AI & Scripts" | "Neural Network" | "AI Model" = "Logic";
+  let category: "Inputs" | "Logic" | "Control Flow" | "Math & Compare" | "Data & Text" | "Lists" | "Outputs" | "AI & Scripts" | "Neural Network" | "AI Model" | "Device Lab" = "Logic";
   if (["triggerInput", "constNum", "constBool", "constString", "sliderInput", "textAreaInput", "currentTimeNode"].includes(type || "")) {
     category = "Inputs";
   } else if (["ifElseTrigger", "condValue", "delayNode", "counterNode", "forLoopNode", "whileLoopNode", "rangeNode", "gateNode", "onceNode", "sequenceNode"].includes(type || "")) {
@@ -41,6 +41,8 @@ const CustomNodeComponent = ({ id, type, data: rawData, selected }: NodeProps) =
     category = "Neural Network";
   } else if (["imageInputGrid", "denseLayer", "conv1dLayer", "outputLayerNode"].includes(type || "")) {
     category = "AI Model";
+  } else if (["wifiScan", "wifiConnect", "bleScan", "usbSerialSend"].includes(type || "")) {
+    category = "Device Lab";
   }
 
   const categoryStyles = getCategoryStyles(category, selected);

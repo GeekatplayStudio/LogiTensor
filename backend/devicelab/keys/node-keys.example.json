@@ -1,0 +1,5 @@
+{
+  "_comment": "Copy to node-keys.local.json (gitignored). Device provisioning keys land here in Device Lab Phase 2; keys are baked into firmware as compile-time defines server-side and never cross the API.",
+  "networkKey": "",
+  "nodes": {}
+}

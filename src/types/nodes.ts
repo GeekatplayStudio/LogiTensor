@@ -18,6 +18,7 @@ import { OUTPUT_NODES } from "./node-definitions/outputs";
 import { AI_SCRIPT_NODES } from "./node-definitions/ai-scripts";
 import { NEURAL_NETWORK_NODES } from "./node-definitions/neural-network";
 import { AI_MODEL_NODES } from "./node-definitions/ai-model";
+import { DEVICE_LAB_NODES } from "./node-definitions/device-lab";
 
 export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
   ...INPUT_NODES,
@@ -30,4 +31,5 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
   ...AI_SCRIPT_NODES,
   ...NEURAL_NETWORK_NODES,
   ...AI_MODEL_NODES,
+  ...DEVICE_LAB_NODES,
 };

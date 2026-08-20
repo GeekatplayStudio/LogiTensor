@@ -50,3 +50,11 @@ backend/.venv/
 
 # LogiTensor dev stack runtime state (pids/ports of npm run dev/start)
 /scripts/.run.json
+
+# Device Lab: transient firmware build stage + local secrets keystore
+backend/devicelab/stage/
+backend/devicelab/keys/*.local.json
+mobile/esp32-companion/node_modules/
+mobile/esp32-companion/ios/
+mobile/esp32-companion/android/
+mobile/esp32-companion/.expo/

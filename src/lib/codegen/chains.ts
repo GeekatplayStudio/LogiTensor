@@ -5,6 +5,7 @@ import { indentLines, tag } from "./lines";
 import { literal } from "./profiles";
 import { requireHelper } from "./runtime-helpers";
 import { flushPending, nodeComment, scoped, withoutMaterialization } from "./materialize";
+import { deviceStepInto } from "./chains-device";
 
 // Turns trigger wiring into sequential statements — the codegen mirror of
 // runTriggerLogic in the store. Each Manual Trigger node becomes one function;
@@ -226,10 +227,17 @@ export function stepInto(ctx: EmitCtx, node: GraphNode, inPort: string, seen: Se
       out.push(...chainFrom(ctx, node, "outTrigger", seen));
       break;
     }
-    default:
+    default: {
+      // Device Lab connectivity nodes (see chains-device.ts).
+      const device = deviceStepInto(ctx, node, inPort, seen);
+      if (device) {
+        out.push(...device);
+        break;
+      }
       // Already names the node, so it bypasses emit's automatic label comment.
       out.push(...tag([p.comment(`${node.data.label}: trigger port "${inPort}" has no code mapping`)], node.id));
       break;
+    }
   }
   return out;
 }

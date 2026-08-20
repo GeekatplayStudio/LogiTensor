@@ -7,6 +7,7 @@ import {
 } from "@xyflow/react";
 import { NodeData } from "@/types/nodes";
 import type { LastRunInfo } from "@/lib/run-report";
+import type { DeviceSlice } from "./device-slice";
 
 export interface Layer {
   id: string;
@@ -25,7 +26,7 @@ export interface Hub {
   activeLayerId: string;
 }
 
-export interface NodeEditorState {
+export interface NodeEditorState extends DeviceSlice {
   nodes: Node<NodeData>[];
   edges: Edge[];
   isRunning: boolean;

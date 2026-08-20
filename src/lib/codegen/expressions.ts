@@ -2,6 +2,7 @@ import type { GraphNode, LanguageProfile } from "./types";
 import { GraphView, NameAllocator } from "./graph";
 import { literal } from "./profiles";
 import { extraOutputExpr } from "./expressions-extra";
+import { deviceOutputExpr } from "./expressions-device";
 import type { MaterializeCtx } from "./materialize";
 import { materializeOutput } from "./materialize";
 
@@ -194,6 +195,9 @@ function computeOutputExpr(ctx: EmitCtx, node: GraphNode, portId: string): strin
       // Extended node library (Inputs / Logic / Math / Text / Lists / Outputs).
       const extra = extraOutputExpr(ctx, node, portId);
       if (extra !== null) return extra;
+      // Device Lab connectivity nodes (see expressions-device.ts).
+      const device = deviceOutputExpr(ctx, node, portId);
+      if (device !== null) return device;
       ctx.warnings.push(`No emitter for node type "${node.type}" — emitted as null.`);
       return p.nil;
     }

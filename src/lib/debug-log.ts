@@ -19,6 +19,7 @@ export type LogSource =
   | "code"
   | "io"
   | "backend"
+  | "device"
   | "system";
 
 export interface LogEntry {

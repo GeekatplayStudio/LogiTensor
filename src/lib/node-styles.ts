@@ -16,6 +16,7 @@ export const MUTED_COLORS = {
   red: "#B57676", // error state
   indigo: "#8686AD", // Neural Network
   olive: "#93A96F", // Lists
+  steel: "#8A9BAD", // Device Lab
 } as const;
 
 /**
@@ -88,6 +89,11 @@ export const getCategoryStyles = (category: string, selected: boolean) => {
       headerBg: "bg-[#7FAAB0]/35 text-zinc-50 border-[#7FAAB0]/40",
       border: selected ? "border-[#7FAAB0] shadow-[0_0_12px_rgba(127,170,176,0.3)]" : "border-zinc-700",
       accent: "bg-[#7FAAB0]",
+    },
+    "Device Lab": {
+      headerBg: "bg-[#8A9BAD]/35 text-zinc-50 border-[#8A9BAD]/40",
+      border: selected ? "border-[#8A9BAD] shadow-[0_0_12px_rgba(138,155,173,0.3)]" : "border-zinc-700",
+      accent: "bg-[#8A9BAD]",
     },
   };
   return styles[category] || styles.Logic;

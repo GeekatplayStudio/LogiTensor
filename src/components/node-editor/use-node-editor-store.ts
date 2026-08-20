@@ -6,6 +6,7 @@ import { createLayersSlice } from "./store/layers-slice";
 import { createHubsSlice } from "./store/hubs-slice";
 import { createExecutionSlice } from "./store/execution-slice";
 import { createPersistenceSlice } from "./store/persistence-slice";
+import { createDeviceSlice } from "./store/device-slice";
 
 export type { Layer, Hub } from "./store/types";
 
@@ -18,5 +19,6 @@ export const useNodeEditorStore = create<NodeEditorState>((set, get) => {
     ...createHubsSlice(set, get),
     ...createExecutionSlice(set, get),
     ...createPersistenceSlice(set, get),
+    ...createDeviceSlice(set),
   };
 });

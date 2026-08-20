@@ -6,6 +6,7 @@ import { logEvent } from "./debug-log";
 import { EXTRA_COMPUTE, EXTRA_BYPASS_PORTS } from "./extra-node-compute";
 import { LIST_COMPUTE, LIST_BYPASS_PORTS } from "./list-node-compute";
 import { EXTRA_TRIGGER_OPS } from "./extra-trigger-ops";
+import { DEVICE_COMPUTE, DEVICE_BYPASS_PORTS, DEVICE_TRIGGER_OPS } from "./device-node-compute";
 
 // Numeric-looking strings become numbers so the Formula node does math on
 // them; everything else stays as-is so `+` concatenates and comparisons work
@@ -73,6 +74,7 @@ const BYPASS_PORTS: Record<string, { primaryIn: string; primaryOut: string }> = 
   conv1dLayer: { primaryIn: "in", primaryOut: "out" },
   ...EXTRA_BYPASS_PORTS,
   ...LIST_BYPASS_PORTS,
+  ...DEVICE_BYPASS_PORTS,
 };
 
 /**
@@ -88,7 +90,7 @@ export function computeNodeOutputs(
     return { [bypass.primaryOut]: inputs[bypass.primaryIn] };
   }
 
-  const registered = EXTRA_COMPUTE[type] ?? LIST_COMPUTE[type];
+  const registered = EXTRA_COMPUTE[type] ?? LIST_COMPUTE[type] ?? DEVICE_COMPUTE[type];
   if (registered) return registered(inputs, config);
 
   const outputs: Record<string, any> = {};
@@ -348,7 +350,7 @@ export async function handleTriggerOperation(
   nextTriggerPort: string | null;
   updatedConfig?: Record<string, any>;
 }> {
-  const registered = EXTRA_TRIGGER_OPS[type];
+  const registered = EXTRA_TRIGGER_OPS[type] ?? DEVICE_TRIGGER_OPS[type];
   if (registered) return registered(inputs, config, targetPortId);
 
   let nextTriggerPort: string | null = null;

@@ -31,6 +31,7 @@ export default function Sidebar() {
     "AI & Scripts": [],
     "Neural Network": [],
     "AI Model": [],
+    "Device Lab": [],
   };
 
   Object.values(NODE_DEFINITIONS).forEach((def) => {

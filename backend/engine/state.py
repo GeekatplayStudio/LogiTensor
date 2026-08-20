@@ -42,6 +42,13 @@ ACTIVE_TYPES = {
     "gateNode",
     "onceNode",
     "sequenceNode",
+    # Device Lab: trigger-driven connectivity nodes (simulated compute in
+    # backend/engine/device.py; usbSerialSend does real serial I/O when a
+    # Device Lab monitor session holds the port).
+    "wifiScan",
+    "wifiConnect",
+    "bleScan",
+    "usbSerialSend",
 }
 
 LOOP_TYPES = {"forLoopNode", "whileLoopNode"}

@@ -1,0 +1,4 @@
+{
+  "_comment": "Copy to device-keys.local.json (gitignored). One 64-hex-char (256-bit) key per device id. Generated via POST /devicelab/keys/generate; baked into firmware as -D DEVICE_KEY at flash time. Example value below is NOT secret — regenerate for real devices.",
+  "cam-01": "0000000000000000000000000000000000000000000000000000000000000000"
+}

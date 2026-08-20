@@ -17,6 +17,7 @@ import {
   Brain,
   Waypoints,
   Boxes,
+  Cpu,
 } from "lucide-react";
 
 interface RadialMenuProps {
@@ -51,6 +52,7 @@ export default function RadialMenu({ x, y, onClose, isOpen }: RadialMenuProps) {
     "AI & Scripts": <Brain size={14} />,
     "Neural Network": <Waypoints size={14} />,
     "AI Model": <Boxes size={14} />,
+    "Device Lab": <Cpu size={14} />,
   };
 
   const categoryColors: Record<string, { bg: string; text: string; border: string; glow: string }> = {
@@ -107,6 +109,12 @@ export default function RadialMenu({ x, y, onClose, isOpen }: RadialMenuProps) {
       text: "text-[#AECBCF]",
       border: "border-[#7FAAB0]/40",
       glow: "shadow-[0_0_8px_rgba(127,170,176,0.3)]",
+    },
+    "Device Lab": {
+      bg: "bg-[#8A9BAD]/15 hover:bg-[#8A9BAD]/25",
+      text: "text-[#B3C0CE]",
+      border: "border-[#8A9BAD]/40",
+      glow: "shadow-[0_0_8px_rgba(138,155,173,0.3)]",
     },
   };
 

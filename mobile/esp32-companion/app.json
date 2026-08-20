@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "ESP32 Companion",
+    "slug": "esp32-companion",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "plugins": [
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "bluetoothAlwaysPermission": "Finds and controls your ESP32 device over Bluetooth."
+        }
+      ]
+    ],
+    "ios": {
+      "bundleIdentifier": "com.geekatplay.esp32companion",
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Sends commands to your ESP32 device over WiFi.",
+        "NSAppTransportSecurity": { "NSAllowsLocalNetworking": true }
+      }
+    },
+    "android": {
+      "package": "com.geekatplay.esp32companion",
+      "permissions": [
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.INTERNET"
+      ],
+      "usesCleartextTraffic": true
+    }
+  }
+}

@@ -9,6 +9,7 @@ import {
   Terminal, Gauge, CheckCheck, FileCode, Table2,
   Bot, Eye, Zap, Waypoints, Link2, TrendingUp, Activity,
   Grid3x3, Layers, Boxes, BookOpen,
+  Wifi, Bluetooth, Usb, Cpu, RadioTower,
 } from "lucide-react";
 
 // Per-node-type icons. The radial menu's outer ring and the sidebar both show
@@ -110,6 +111,12 @@ const NODE_ICONS: Record<string, React.ComponentType<{ size?: number | string; c
   denseLayer: Layers,
   conv1dLayer: Boxes,
   outputLayerNode: BookOpen,
+
+  // Device Lab
+  wifiScan: RadioTower,
+  wifiConnect: Wifi,
+  bleScan: Bluetooth,
+  usbSerialSend: Usb,
 };
 
 // Category fallbacks keep new node types usable before they get a bespoke icon.
@@ -124,6 +131,7 @@ const CATEGORY_FALLBACK: Record<string, React.ComponentType<{ size?: number | st
   "AI & Scripts": Bot,
   "Neural Network": Waypoints,
   "AI Model": Boxes,
+  "Device Lab": Cpu,
 };
 
 /** Icon element for a node type, falling back to its category's icon. */

@@ -19,6 +19,8 @@ import {
   Terminal as TerminalIcon,
   ClipboardList,
 } from "lucide-react";
+import { Cpu } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { getLogEntries } from "@/lib/debug-log";
@@ -195,6 +197,11 @@ export default function Toolbar({
       <Button variant="outline" size="sm" onClick={onToggle3D} className={`${iconBtn} hover:!text-cyan-300`} title="Flow 3D preview (three.js)">
         <Box className="w-3.5 h-3.5" />
       </Button>
+      <Link href="/device-lab">
+        <Button variant="outline" size="sm" className={`${iconBtn} hover:!text-emerald-300`} title="Device Lab — flash and talk to real hardware">
+          <Cpu className="w-3.5 h-3.5" />
+        </Button>
+      </Link>
       <Button variant="outline" size="sm" onClick={onHelp} className={iconBtn} title="How LogiTensor works">
         <HelpCircle className="w-3.5 h-3.5" />
       </Button>

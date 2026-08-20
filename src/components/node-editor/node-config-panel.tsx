@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import RangeNodeConfig from "./range-node-config";
 import ExtraNodeConfig from "./extra-node-config";
+import DeviceNodeConfig from "./device-node-config";
 
 // Per-node-type config editors shown in a node's body. Split out of
 // custom-nodes.tsx to keep that file under the repo's module size guardrail.
@@ -211,6 +212,9 @@ export default function NodeConfigPanel({
 
       {/* Config editors for the extended node library (see extra-node-config.tsx) */}
       <ExtraNodeConfig type={type} data={data} onConfigChange={onConfigChange} />
+
+      {/* Device Lab connectivity nodes (see device-node-config.tsx) */}
+      <DeviceNodeConfig type={type} data={data} onConfigChange={onConfigChange} />
 
       {type === "assertNode" && (
         <div className="flex items-center justify-between py-1 bg-zinc-950/40 px-2 rounded border border-zinc-900/60">

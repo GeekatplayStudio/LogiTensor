@@ -182,7 +182,7 @@ Technology was picked to fit the problem, not to look impressive on a list — h
 - **Concentric Radial Menu**: Right-click anywhere on the canvas to open a radial category selector to drop nodes exactly where clicked.
 
 ### 5. Advanced Node Library
-**72 node types across 10 categories.** Every one is implemented twice (TypeScript for live preview, Python for real execution) and parity-tested against its twin.
+**79 node types across 11 categories.** Every one is implemented twice (TypeScript for live preview, Python for real execution) and parity-tested against its twin.
 
 - **Inputs**: Manual Trigger, Constants (Number, Boolean, String), **Slider** (min/max/step), **Text Area** (multiline), **Current Time** (epoch ms + formatted).
 - **Logic Gates**: AND, OR, NOT, XOR, NOR, NAND, **XNOR**, **Toggle** (each trigger flips a stored boolean), **Latch** (SR: Set/Reset hold a state).
@@ -205,6 +205,7 @@ Technology was picked to fit the problem, not to look impressive on a list — h
   - *Image Input Grid*: Upload an image and pixelate it onto an N×N grid (4×4 up to 32×32); each cell becomes the average color and luminosity of that region, forming the network's input vector.
   - *Dense Layer*: A fully-connected layer — every incoming value feeds every neuron through its own weight, drawn live inside the node as the classic weight web (amber = positive, teal = negative, opacity by magnitude). Configurable neuron count, activation (Sigmoid/ReLU/Tanh), and a weight seed (weights are deterministically generated from the seed, identical on the frontend and the backend). Chain multiple Dense Layers for hidden layers.
   - *Output Layer*: Renders each incoming activation as a bar and outputs the index of the strongest neuron (the winner).
+- **Device Lab**: WiFi Scan/Connect, BLE Scan, USB Serial Send — simulate deterministically on the canvas, compile to real Arduino calls when sent to a device. See §13.
 - **Enabled bypass**: Most computation nodes (Logic gates, Math & Compare, Data & Text, Neural Network) carry an `Enabled` boolean input (default `true`). Set it false — directly or by wiring in a boolean — and the node skips its own logic, passing its primary input straight through to its primary output instead, as if it weren't in the graph.
 
 ### 6. Natural-Language Flow Builder
@@ -243,7 +244,14 @@ Technology was picked to fit the problem, not to look impressive on a list — h
 - **Python AST Scanner**: Custom scripts are statically scanned using Python's Abstract Syntax Tree parser. Blocks dangerous modules (`os`, `sys`, `subprocess`, `requests`), builtins (`eval`, `exec`, `open`), and dunder properties.
 - **JS/Python Expression Sandbox**: Math and Formula nodes run a token-based Shunting-yard calculator, isolating execution threads from window/interpreter global spaces, mirrored identically on both the frontend and the backend.
 
-### 13. In-App Help & About
+### 13. Device Lab — real hardware, real security
+- A dedicated screen (`/device-lab`) for building and flashing real ESP32 firmware, talking to it over **WiFi or Bluetooth**, and controlling it from a **desktop panel or a cross-platform phone app (iPhone + Android)** — the node canvas's "logic" made physical.
+- **USB workflow**: auto-detects a board the moment it's plugged in, builds with `arduino-cli` and flashes with `esptool` as polled backend jobs, reads a board's flash back into a downloadable image, and runs one-click "Sync device" (build + flash together). A **Device check** panel identifies the chip itself (works on any firmware, or none) and asks a running firmware to prove itself alive with `ping`/`info`/`test` — the last one grabbing a real camera frame and reporting timing, WiFi, and memory.
+- **Reference firmware** (`firmware/esp32video/`): an ESP32 camera module that serves an MJPEG stream, advertises over BLE for phone discovery, and can join a home WiFi network at runtime (BLE or HTTP command, saved to NVS) — with its own always-on access point as a permanent fallback.
+- **Consumer-grade command security, not an afterthought**: every command (flash an LED, echo data, run diagnostics) requires a fresh single-use nonce plus an `HMAC-SHA256` signature from a per-device key that's generated once, baked into firmware at build time via a redacted compiler define, and never stored in plaintext on the phone (iOS Keychain / Android Keystore only). A **"send a forged command"** button lets you watch the device reject a tampered signature live. The desktop panel and the phone app share one `CommandChannel`/`DeviceTransport` abstraction (`src/lib/device-lab/transport/`, mirrored in the mobile app) so WiFi and Bluetooth get identical guarantees — a transport moves bytes and never sees a key. See [`docs/DEVICE_LAB.md`](./docs/DEVICE_LAB.md) for the architecture and [`docs/SECURITY_CASE_STUDY.md`](./docs/SECURITY_CASE_STUDY.md) for the real-world failures (Mirai, Ring, Wyze, Verkada, Eufy, BLE relay attacks) this design deliberately avoids.
+- **Same dual-engine, same node system**: WiFi/BLE/serial connectivity nodes (`src/types/node-definitions/device-lab.ts`) simulate deterministically on the canvas — parity-tested against a Python mirror like every other node type — and compile to real Arduino calls (`src/lib/device-lab/firmware-codegen.ts`) when sent to a device.
+
+### 14. In-App Help & About
 - A **Help** panel (top toolbar) walks through building flows, the node library, dimensions, the 3D stack, and federation.
 - An **About** panel carries the LogiTensor pitch and Geekatplay Studio background, plus a link back to this repository.
 
@@ -290,6 +298,11 @@ A GitHub Actions workflow (`.github/workflows/ci.yml`) runs lint, typecheck, `np
 ## Roadmap
 
 [`ROADMAP.md`](./ROADMAP.md) is the design record for the multi-language code panel, natural-language builder, visual run-through testing, three.js preview, and the module-size cleanup — grounded in a full audit of this repo (and of Geekatplay Studio's ASH-Mesh Device Logic Studio, the reference for the code-generation architecture). All phases in it are implemented.
+
+## Device Lab documentation
+
+- [`docs/DEVICE_LAB.md`](./docs/DEVICE_LAB.md) — the communication-layer architecture (`CommandChannel` / `DeviceTransport` / `CommandSigner`), a step-by-step guide to pairing a device, and to adding a new transport or command.
+- [`docs/SECURITY_CASE_STUDY.md`](./docs/SECURITY_CASE_STUDY.md) — a case study on consumer IoT security: what went wrong at Mirai-botnet scale and at Ring, Wyze, Verkada, and Eufy specifically, the industry baseline (OWASP IoT Top Ten / ETSI EN 303 645), how this project's design answers each failure pattern, and an honest list of what it does *not* yet do before it would be shippable hardware.
 
 ---
 *Branded and developed by Geekatplay Studio.*
