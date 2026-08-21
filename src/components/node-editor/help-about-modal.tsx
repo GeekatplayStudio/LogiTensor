@@ -10,6 +10,7 @@ import {
   Network,
   Sparkles,
   GitBranch,
+  FileJson2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -170,6 +171,19 @@ function HelpContent() {
           <b>federation endpoint</b> (network icon) to connect it, by name, to matching endpoints in
           other hubs — a live channel connection you can watch pulse between cubes. Create, duplicate,
           rename, and delete hubs the same way you manage dimensions.
+        </p>
+      </Section>
+
+      <Section icon={<FileJson2 size={15} />} title="Opening and saving flows">
+        <p>
+          The toolbar&apos;s download icon exports every hub and dimension to one JSON file; the upload
+          icon opens one back up. You can also just <b>drag a saved .json straight onto the canvas</b> —
+          it is shape-checked before it loads, so a stray file can never wipe the board.
+        </p>
+        <p>
+          The code panel takes drops too: <b>drop a source file</b> (.ts, .py, .ino, …) on it to load
+          the code into the editor, then press <b>Build Logic</b> to have it rebuilt as a verified node
+          flow. A flow JSON dropped there is recognized for what it is and loaded onto the board instead.
         </p>
       </Section>
     </div>

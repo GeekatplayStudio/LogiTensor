@@ -13,6 +13,7 @@ import TerminalPanel from "@/components/node-editor/terminal-panel";
 import LayersStackView from "@/components/node-editor/layers-stack-view";
 import HelpAboutModal from "@/components/node-editor/help-about-modal";
 import { useNodeEditorStore } from "@/components/node-editor/use-node-editor-store";
+import { useBlockStrayFileDrops } from "@/components/node-editor/use-file-drop";
 import { Layers, Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -20,6 +21,10 @@ import { Button } from "@/components/ui/button";
 const Flow3DView = dynamic(() => import("@/components/three/flow-3d-view"), { ssr: false });
 
 export default function Home() {
+  // A file dropped outside the canvas / code panel must never navigate the
+  // browser away from an unsaved session.
+  useBlockStrayFileDrops();
+
   // Layer controls
   const layers = useNodeEditorStore((state) => state.layers);
   const activeLayerId = useNodeEditorStore((state) => state.activeLayerId);

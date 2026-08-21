@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Copy,
   Check,
@@ -14,6 +14,7 @@ import {
   ListPlus,
   ShieldCheck,
   FlaskConical,
+  FileCode2,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -24,6 +25,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useNodeEditorStore } from "./use-node-editor-store";
+import { useFileDrop } from "./use-file-drop";
+import { CODE_EXTENSIONS, extensionOf, inspectFlowJson } from "@/lib/file-drop";
 import { generateCode, CODE_TARGETS } from "@/lib/codegen";
 import { generateTestFile } from "@/lib/codegen/testgen";
 import { buildLogicFromCode } from "@/lib/code-import";
@@ -55,6 +58,7 @@ export default function CodePanel() {
   const toggleBreakpoint = useNodeEditorStore((s) => s.toggleBreakpoint);
   const clearBreakpoints = useNodeEditorStore((s) => s.clearBreakpoints);
   const setTestPanel = useNodeEditorStore((s) => s.setTestPanel);
+  const loadFromFile = useNodeEditorStore((s) => s.loadFromFile);
   const [target, setTarget] = useState("typescript");
   const [copied, setCopied] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -108,6 +112,32 @@ export default function CodePanel() {
       cancelled = true;
     };
   }, []);
+
+  // Dropping a source file loads it into the editor, ready for Build Logic. A
+  // dropped flow JSON is recognised for what it is and loaded onto the board
+  // instead of being pasted in as text.
+  const onSourceFile = useCallback(
+    (file: File, text: string) => {
+      if (extensionOf(file.name) === ".json") {
+        const check = inspectFlowJson(text);
+        if (check.ok) {
+          loadFromFile(text);
+          return;
+        }
+      }
+      setDraft(text);
+      setEditing(true);
+      toast.success(`${file.name} loaded — press Build Logic to turn it into nodes`);
+      logEvent("info", "io", `Dropped ${file.name} into the code editor`, `${text.length} characters`);
+    },
+    [loadFromFile]
+  );
+
+  const { isOver, dropZoneProps, handleDrop } = useFileDrop({
+    extensions: CODE_EXTENSIONS,
+    onFile: onSourceFile,
+    label: "source file",
+  });
 
   const result = useMemo(() => generateCode(nodes, edges, target), [nodes, edges, target]);
   const grammar = CODE_TARGETS.find((t) => t.id === target)?.grammar ?? "typescript";
@@ -176,7 +206,23 @@ export default function CodePanel() {
   };
 
   return (
-    <div className="h-full flex flex-col bg-zinc-950 border-l border-zinc-900">
+    <div
+      className="relative h-full flex flex-col bg-zinc-950 border-l border-zinc-900"
+      {...dropZoneProps}
+      onDrop={handleDrop}
+    >
+      {/* Drop target feedback for a source file dragged in from the OS */}
+      {isOver && (
+        <div className="absolute inset-2 z-40 flex items-center justify-center rounded-xl border-2 border-dashed border-emerald-500/70 bg-zinc-950/70 backdrop-blur-sm pointer-events-none">
+          <div className="flex flex-col items-center gap-2 animate-pulse px-3 text-center">
+            <FileCode2 className="w-8 h-8 text-emerald-400" />
+            <span className="text-xs font-black uppercase tracking-widest text-emerald-300">
+              Drop code to edit
+            </span>
+            <span className="text-[10px] text-zinc-400">Then Build Logic turns it into nodes</span>
+          </div>
+        </div>
+      )}
       <div className="h-10 shrink-0 flex items-center gap-2 px-2.5 border-b border-zinc-900">
         <Code2 className={`w-3.5 h-3.5 shrink-0 ${editing ? "text-amber-400" : "text-emerald-400"}`} />
         <Select

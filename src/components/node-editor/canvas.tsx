@@ -9,7 +9,12 @@ import {
   ReactFlowProvider,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { FileJson2 } from "lucide-react";
+import { toast } from "sonner";
 
+import { FLOW_EXTENSIONS, inspectFlowJson } from "@/lib/file-drop";
+import { logEvent } from "@/lib/debug-log";
+import { useFileDrop } from "./use-file-drop";
 import { useNodeEditorStore } from "./use-node-editor-store";
 import { nodeTypes } from "./node-types-registry";
 import RadialMenu from "./radial-menu";
@@ -25,6 +30,7 @@ function FlowCanvas() {
   const copySelectedNodes = useNodeEditorStore((state) => state.copySelectedNodes);
   const pasteClipboard = useNodeEditorStore((state) => state.pasteClipboard);
   const deleteSelectedNodes = useNodeEditorStore((state) => state.deleteSelectedNodes);
+  const loadFromFile = useNodeEditorStore((state) => state.loadFromFile);
 
   const { screenToFlowPosition } = useReactFlow();
 
@@ -66,13 +72,42 @@ function FlowCanvas() {
     y: 0,
   });
 
+  // A saved flow dropped straight onto the canvas: shape-checked first so a
+  // stray JSON file can never wipe the board with an empty graph.
+  const onFlowFile = useCallback(
+    (file: File, text: string) => {
+      const check = inspectFlowJson(text);
+      if (!check.ok) {
+        toast.error(`${file.name}: ${check.reason}`);
+        logEvent("error", "io", `Rejected dropped file ${file.name}`, check.reason);
+        return;
+      }
+      logEvent(
+        "info",
+        "io",
+        `Dropped ${file.name}`,
+        `${check.layerCount} dimension(s), ${check.nodeCount} node(s)`
+      );
+      loadFromFile(text);
+    },
+    [loadFromFile]
+  );
+
+  const { isOver, dropZoneProps, handleDrop } = useFileDrop({
+    extensions: FLOW_EXTENSIONS,
+    onFile: onFlowFile,
+    label: "flow JSON",
+  });
+
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
+    // Files copy onto the board; palette drags move a new node into place.
+    event.dataTransfer.dropEffect = event.dataTransfer.types.includes("Files") ? "copy" : "move";
   }, []);
 
   const onDrop = useCallback(
     (event: React.DragEvent) => {
+      if (handleDrop(event)) return;
       event.preventDefault();
       const type = event.dataTransfer.getData("application/reactflow");
       if (!type) return;
@@ -85,7 +120,7 @@ function FlowCanvas() {
       // Shift slightly so node is placed relative to where cursor dropped
       addNode(type, position.x - 100, position.y - 50);
     },
-    [screenToFlowPosition, addNode]
+    [screenToFlowPosition, addNode, handleDrop]
   );
 
   const onPaneContextMenu = useCallback((event: any) => {
@@ -109,7 +144,12 @@ function FlowCanvas() {
   };
 
   return (
-    <div className="flex-1 h-full relative" onDragOver={onDragOver} onDrop={onDrop}>
+    <div
+      className="flex-1 h-full relative"
+      {...dropZoneProps}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -147,6 +187,19 @@ function FlowCanvas() {
           maskColor="rgba(9, 9, 11, 0.7)"
         />
       </ReactFlow>
+
+      {/* Drop target feedback for a flow file dragged in from the OS */}
+      {isOver && (
+        <div className="absolute inset-2 z-40 flex items-center justify-center rounded-xl border-2 border-dashed border-amber-500/70 bg-zinc-950/70 backdrop-blur-sm pointer-events-none">
+          <div className="flex flex-col items-center gap-2 animate-pulse">
+            <FileJson2 className="w-8 h-8 text-amber-400" />
+            <span className="text-xs font-black uppercase tracking-widest text-amber-300">
+              Drop flow JSON to load
+            </span>
+            <span className="text-[10px] text-zinc-400">Replaces the current board</span>
+          </div>
+        </div>
+      )}
 
       {/* Interactive Radial Context Menu */}
       <RadialMenu

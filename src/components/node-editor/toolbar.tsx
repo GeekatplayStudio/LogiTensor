@@ -181,7 +181,7 @@ export default function Toolbar({
       <Button variant="outline" size="sm" onClick={saveToFile} className={iconBtn} title="Export algorithm to JSON">
         <Download className="w-3.5 h-3.5" />
       </Button>
-      <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className={iconBtn} title="Import algorithm from JSON">
+      <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className={iconBtn} title="Import algorithm from JSON — or drag a .json file onto the canvas">
         <Upload className="w-3.5 h-3.5" />
       </Button>
       <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".json" className="hidden" />

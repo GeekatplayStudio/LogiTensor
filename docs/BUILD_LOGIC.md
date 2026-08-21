@@ -9,8 +9,14 @@ optionally a runnable test file for the whole board.
 
 1. **Open edit mode.** In the code panel (right side), click the **pencil**.
    The panel detaches from the canvas and becomes a free-form editor.
-2. **Paste your code.** Any language — the analyzer reads the logic, not the
-   syntax dialect.
+2. **Paste your code** — or **drag a source file onto the panel** from your
+   file manager (`.ts`, `.js`, `.py`, `.c`, `.cpp`, `.ino`, `.rs`, `.go`,
+   `.java`, `.cs`, `.rb`, `.php`, `.lua`, `.sh`, `.yaml`, `.md`, …), which
+   opens edit mode and loads the file for you, so step 1 is optional. Any
+   language — the analyzer reads the logic, not the syntax dialect.
+   A saved flow `.json` dropped here is recognized as a flow and loaded onto
+   the canvas instead of pasted in as text; the canvas itself takes flow
+   `.json` drops too.
 3. **Pick options** (toolbar, left of the button):
    - **Model** — which local Ollama model analyzes the code. Larger coder
      models (`qwen2.5-coder:32b` etc.) map logic far more faithfully.
@@ -115,5 +121,6 @@ from the current board), and close.
 | `src/lib/codegen/testgen.ts` | vitest/pytest generation from live board values |
 | `src/components/node-editor/code-panel.tsx` | toolbar: model, mode, Build Logic, shield, flask |
 | `src/components/node-editor/test-panel.tsx` | split test pane below the editor |
+| `src/lib/file-drop.ts`, `src/components/node-editor/use-file-drop.ts` | drag-and-drop: extension matching, flow-JSON shape check, drop zones |
 | `backend/nl_builder.py` | `CODE_SYSTEM_PROMPT` — the detailed-analysis rules |
-| `src/lib/__tests__/graph-verify.test.ts`, `testgen.test.ts` | unit tests |
+| `src/lib/__tests__/graph-verify.test.ts`, `testgen.test.ts`, `file-drop.test.ts` | unit tests |
