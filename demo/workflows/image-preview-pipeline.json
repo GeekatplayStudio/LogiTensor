@@ -1,0 +1,296 @@
+{
+  "version": 1,
+  "name": "Image Preview Pipeline",
+  "description": "Image-to-features pipeline: a 16x16 Image Input Grid previews any picture (drop in a webcam still), a Conv1D layer extracts local features, a Dense layer condenses them, and the winner index drives a Gauge. A live webcam node is on the roadmap - today the grid node previews any uploaded frame.",
+  "nodes": [
+    {
+      "id": "image_preview_pipeline_0",
+      "type": "imageInputGrid",
+      "position": {
+        "x": 80,
+        "y": 80
+      },
+      "data": {
+        "label": "Image Input Grid",
+        "type": "imageInputGrid",
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "values",
+            "name": "Values",
+            "type": "data",
+            "dataType": "any"
+          }
+        ],
+        "config": {
+          "gridSize": 16,
+          "cellValues": [],
+          "cellColors": [],
+          "imageSrc": "",
+          "imageName": ""
+        },
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "image_preview_pipeline_1",
+      "type": "conv1dLayer",
+      "position": {
+        "x": 380,
+        "y": 80
+      },
+      "data": {
+        "label": "Conv1D Layer",
+        "type": "conv1dLayer",
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Values In",
+            "type": "data",
+            "dataType": "any",
+            "value": []
+          },
+          {
+            "id": "enabled",
+            "name": "Enabled",
+            "type": "data",
+            "dataType": "boolean",
+            "value": true
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Feature Map",
+            "type": "data",
+            "dataType": "any"
+          }
+        ],
+        "config": {
+          "filters": 4,
+          "kernelSize": 3,
+          "stride": 1,
+          "activation": "relu",
+          "seed": 42
+        },
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "image_preview_pipeline_2",
+      "type": "denseLayer",
+      "position": {
+        "x": 680,
+        "y": 80
+      },
+      "data": {
+        "label": "Dense Layer",
+        "type": "denseLayer",
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Values In",
+            "type": "data",
+            "dataType": "any",
+            "value": []
+          },
+          {
+            "id": "enabled",
+            "name": "Enabled",
+            "type": "data",
+            "dataType": "boolean",
+            "value": true
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Activations",
+            "type": "data",
+            "dataType": "any"
+          }
+        ],
+        "config": {
+          "neurons": 8,
+          "activation": "sigmoid",
+          "seed": 42
+        },
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "image_preview_pipeline_3",
+      "type": "outputLayerNode",
+      "position": {
+        "x": 980,
+        "y": 80
+      },
+      "data": {
+        "label": "Output Layer",
+        "type": "outputLayerNode",
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Activations",
+            "type": "data",
+            "dataType": "any",
+            "value": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Values",
+            "type": "data",
+            "dataType": "any"
+          },
+          {
+            "id": "winner",
+            "name": "Winner",
+            "type": "data",
+            "dataType": "number"
+          }
+        ],
+        "config": {},
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "image_preview_pipeline_4",
+      "type": "gaugeNode",
+      "position": {
+        "x": 1280,
+        "y": 80
+      },
+      "data": {
+        "label": "Gauge",
+        "type": "gaugeNode",
+        "inputs": [
+          {
+            "id": "value",
+            "name": "Value",
+            "type": "data",
+            "dataType": "number",
+            "value": 0
+          }
+        ],
+        "outputs": [
+          {
+            "id": "percent",
+            "name": "Percent",
+            "type": "data",
+            "dataType": "number"
+          }
+        ],
+        "config": {
+          "min": 0,
+          "max": 7
+        },
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "image_preview_pipeline_5",
+      "type": "triggerInput",
+      "position": {
+        "x": 80,
+        "y": 270
+      },
+      "data": {
+        "label": "Manual Trigger",
+        "type": "triggerInput",
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "triggerOut",
+            "name": "Trigger",
+            "type": "trigger"
+          }
+        ],
+        "config": {},
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "image_preview_pipeline_6",
+      "type": "loggerNode",
+      "position": {
+        "x": 1280,
+        "y": 270
+      },
+      "data": {
+        "label": "Console Logger",
+        "type": "loggerNode",
+        "inputs": [
+          {
+            "id": "inTrigger",
+            "name": "Log",
+            "type": "trigger"
+          },
+          {
+            "id": "value",
+            "name": "Value",
+            "type": "data",
+            "dataType": "any",
+            "value": "log me"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "outTrigger",
+            "name": "Out",
+            "type": "trigger"
+          }
+        ],
+        "config": {
+          "logs": []
+        },
+        "executionState": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "image_preview_pipeline_0-image_preview_pipeline_1-in",
+      "source": "image_preview_pipeline_0",
+      "sourceHandle": "values",
+      "target": "image_preview_pipeline_1",
+      "targetHandle": "in"
+    },
+    {
+      "id": "image_preview_pipeline_1-image_preview_pipeline_2-in",
+      "source": "image_preview_pipeline_1",
+      "sourceHandle": "out",
+      "target": "image_preview_pipeline_2",
+      "targetHandle": "in"
+    },
+    {
+      "id": "image_preview_pipeline_2-image_preview_pipeline_3-in",
+      "source": "image_preview_pipeline_2",
+      "sourceHandle": "out",
+      "target": "image_preview_pipeline_3",
+      "targetHandle": "in"
+    },
+    {
+      "id": "image_preview_pipeline_3-image_preview_pipeline_4-value",
+      "source": "image_preview_pipeline_3",
+      "sourceHandle": "winner",
+      "target": "image_preview_pipeline_4",
+      "targetHandle": "value"
+    },
+    {
+      "id": "image_preview_pipeline_3-image_preview_pipeline_6-value",
+      "source": "image_preview_pipeline_3",
+      "sourceHandle": "winner",
+      "target": "image_preview_pipeline_6",
+      "targetHandle": "value"
+    },
+    {
+      "id": "image_preview_pipeline_5-image_preview_pipeline_6-inTrigger",
+      "source": "image_preview_pipeline_5",
+      "sourceHandle": "triggerOut",
+      "target": "image_preview_pipeline_6",
+      "targetHandle": "inTrigger"
+    }
+  ]
+}

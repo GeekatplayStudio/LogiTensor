@@ -23,6 +23,10 @@ export interface EmitCtx extends MaterializeCtx {
   visiting: Set<string>;
   /** node ids already emitted inside a trigger chain (see stepInto) */
   emitted: Set<string>;
+  /** module-level state variable names — Python trigger functions must
+   * declare them `global`, or assignment silently rebinds a local and the
+   * read before it raises UnboundLocalError */
+  stateVars: Set<string>;
 }
 
 export function addSetup(ctx: EmitCtx, lines: string[]): void {
@@ -217,6 +221,7 @@ function initialState(node: GraphNode, key: string): unknown {
 export function stateVar(ctx: EmitCtx, node: GraphNode, key: string): string {
   const name = `${ctx.names.nameFor(node)}_${key}`;
   addSetup(ctx, [ctx.profile.declare(name, literal(ctx.profile, initialState(node, key)))]);
+  ctx.stateVars.add(name);
   return name;
 }
 

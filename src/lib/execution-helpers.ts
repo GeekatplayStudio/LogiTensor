@@ -31,6 +31,14 @@ export {
   conv1dFullWeights,
 } from "./nn-math";
 
+// Numeric coercion that can never poison stateful config: anything that
+// isn't a finite number (undefined, garbage strings, NaN, Infinity) becomes
+// the fallback instead. Mirrors backend/engine/values.py to_num.
+function safeNum(v: unknown, fallback = 0): number {
+  const n = Number(v ?? fallback);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 /**
  * Resolves any condition-ish value (booleans, "true"/"1"/"yes" strings, or a
  * safe expression string) to a boolean. Shared by If/Else and While Loop.
@@ -402,22 +410,25 @@ export async function handleTriggerOperation(
     if (targetPortId === "incTrigger") change = 1;
     else if (targetPortId === "decTrigger") change = -1;
 
+    // safeNum: a count that ever became non-numeric (stale saved file,
+    // hand-edited config) would otherwise turn NaN and wedge the counter
+    // forever — NaN + 1 is NaN, so no later trigger could recover it.
     const currentCount =
       targetPortId === "resetTrigger"
         ? 0
-        : Number(config.count ?? 0) + change;
+        : safeNum(config.count) + change;
 
     updatedConfig = { ...config, count: currentCount };
   }
   else if (type === "rangeNode") {
     if (targetPortId === "resetTrigger") {
-      updatedConfig = { ...config, count: Number(config.initialCount ?? 0) };
+      updatedConfig = { ...config, count: safeNum(config.initialCount) };
     } else {
       const value = Number(inputs.value ?? 0);
       const min = Number(config.min ?? 0);
       const max = Number(config.max ?? 0);
       const inRange = value >= min && value <= max;
-      const current = Number(config.count ?? config.initialCount ?? 0);
+      const current = safeNum(config.count ?? config.initialCount);
       updatedConfig = { ...config, count: inRange ? current + 1 : current - 1 };
     }
   }

@@ -83,10 +83,13 @@ describe("hybrid trigger port smoke test (store-level)", () => {
     const counterId = addAt("counterNode", 200, 0);
     const store = useNodeEditorStore.getState();
 
+    // fireTriggerInput is the API that fires an INPUT trigger port directly
+    // (triggerNode fires a node's OUTGOING trigger edges — the counter has
+    // none, so the old call was a silent no-op and the test always saw 0).
     await Promise.all([
-      store.triggerNode(counterId, "incTrigger"),
-      store.triggerNode(counterId, "incTrigger"),
-      store.triggerNode(counterId, "incTrigger"),
+      store.fireTriggerInput(counterId, "incTrigger"),
+      store.fireTriggerInput(counterId, "incTrigger"),
+      store.fireTriggerInput(counterId, "incTrigger"),
     ]);
 
     expect(countOf(counterId)).toBe(3);

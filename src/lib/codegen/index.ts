@@ -2,7 +2,7 @@ import type { Edge } from "@xyflow/react";
 import type { GraphNode, GenerateResult } from "./types";
 import { jsProfile, pyProfile } from "./profiles";
 import { assembleNative } from "./assemble";
-import { adaptFromJs } from "./adapters";
+import { adaptFromJs, adaptFromPython } from "./adapters";
 import { joinLines } from "./lines";
 
 export { CODE_TARGETS } from "./types";
@@ -11,10 +11,16 @@ export type { CodeTarget, CodeLine, GenerateResult } from "./types";
 /**
  * Pure function: canvas graph in, source code out. Native emission for
  * Python and JavaScript; TypeScript is the JS emission (the generated JS is
- * already valid TS); C/C++/Go/Rust/PHP are derived from JS via line adapters.
+ * already valid TS); MicroPython derives from the Python emission;
+ * C/C++/Go/Rust/Ruby/PHP derive from JS via line adapters.
  */
 export function generateCode(nodes: GraphNode[], edges: Edge[], target: string): GenerateResult {
   if (target === "python") return assembleNative(nodes, edges, pyProfile);
+  if (target === "micropython") {
+    const py = assembleNative(nodes, edges, pyProfile);
+    const lines = adaptFromPython(py.lines);
+    return { code: joinLines(lines), lines, warnings: py.warnings };
+  }
   const js = assembleNative(nodes, edges, jsProfile);
   if (target === "javascript" || target === "typescript") return js;
   const lines = adaptFromJs(js.lines, target);

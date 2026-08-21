@@ -21,7 +21,9 @@ export const CODE_TARGETS: CodeTarget[] = [
   { id: "cpp", label: "C++", grammar: "cpp" },
   { id: "go", label: "Go", grammar: "go" },
   { id: "rust", label: "Rust", grammar: "rust" },
+  { id: "ruby", label: "Ruby", grammar: "ruby" },
   { id: "php", label: "PHP", grammar: "php" },
+  { id: "micropython", label: "MicroPython", grammar: "python" },
 ];
 
 export type GraphNode = Node<NodeData>;

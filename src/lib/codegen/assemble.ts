@@ -25,6 +25,7 @@ export function assembleNative(nodes: GraphNode[], edges: Edge[], profile: Langu
     pending: [],
     materialized: new Map(),
     noMaterialize: 0,
+    stateVars: new Set(),
   };
   const unit = profile.id === "python" ? "    " : "  ";
 
@@ -87,6 +88,12 @@ export function assembleNative(nodes: GraphNode[], edges: Edge[], profile: Langu
     // The def/close scaffolding belongs to the trigger node; the body lines
     // keep the tags of whichever nodes produced them.
     lines.push(...tag([profile.defLine(fn.name, [])], fn.nodeId));
+    // Python: module-level state (counters, toggles, latches …) assigned
+    // inside a function rebinds a local without this — the read before the
+    // assignment then raises UnboundLocalError. JS closures need nothing.
+    if (profile.id === "python" && ctx.stateVars.size > 0) {
+      lines.push(...tag([`${unit}global ${[...ctx.stateVars].join(", ")}`], fn.nodeId));
+    }
     lines.push(...indentLines(fn.body, unit));
     if (profile.blockClose) lines.push(...tag([profile.blockClose], fn.nodeId));
     lines.push(...tag([""], fn.nodeId));

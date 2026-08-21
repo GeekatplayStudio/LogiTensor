@@ -1,0 +1,619 @@
+{
+  "version": 1,
+  "name": "WiFi + BLE Signal Monitor",
+  "description": "Scans WiFi and BLE, joins the esp32video access point, converts RSSI to a 0-100 gauge, and branches on signal quality — weak readings increment a counter. Simulated on the canvas; compiles to real WiFi.scanNetworks()/WiFi.begin() when sent to a device from the Device Lab.",
+  "nodes": [
+    {
+      "id": "wifi_ble_signal_monitor_0",
+      "type": "triggerInput",
+      "position": {
+        "x": 80,
+        "y": 80
+      },
+      "data": {
+        "label": "Manual Trigger",
+        "type": "triggerInput",
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "triggerOut",
+            "name": "Trigger",
+            "type": "trigger"
+          }
+        ],
+        "config": {},
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "wifi_ble_signal_monitor_1",
+      "type": "wifiScan",
+      "position": {
+        "x": 380,
+        "y": 80
+      },
+      "data": {
+        "label": "WiFi Scan",
+        "type": "wifiScan",
+        "inputs": [
+          {
+            "id": "inTrigger",
+            "name": "Scan",
+            "type": "trigger"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "outTrigger",
+            "name": "Done",
+            "type": "trigger"
+          },
+          {
+            "id": "networks",
+            "name": "Networks",
+            "type": "data",
+            "dataType": "any"
+          },
+          {
+            "id": "count",
+            "name": "Count",
+            "type": "data",
+            "dataType": "number"
+          }
+        ],
+        "config": {
+          "band": "all",
+          "networks": []
+        },
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "wifi_ble_signal_monitor_2",
+      "type": "bleScan",
+      "position": {
+        "x": 680,
+        "y": 80
+      },
+      "data": {
+        "label": "BLE Scan",
+        "type": "bleScan",
+        "inputs": [
+          {
+            "id": "inTrigger",
+            "name": "Scan",
+            "type": "trigger"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "outTrigger",
+            "name": "Done",
+            "type": "trigger"
+          },
+          {
+            "id": "devices",
+            "name": "Devices",
+            "type": "data",
+            "dataType": "any"
+          },
+          {
+            "id": "count",
+            "name": "Count",
+            "type": "data",
+            "dataType": "number"
+          }
+        ],
+        "config": {
+          "durationMs": 3000,
+          "devices": []
+        },
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "wifi_ble_signal_monitor_3",
+      "type": "wifiConnect",
+      "position": {
+        "x": 980,
+        "y": 80
+      },
+      "data": {
+        "label": "WiFi Connect",
+        "type": "wifiConnect",
+        "inputs": [
+          {
+            "id": "inTrigger",
+            "name": "Connect",
+            "type": "trigger"
+          },
+          {
+            "id": "ssid",
+            "name": "SSID",
+            "type": "data",
+            "dataType": "string",
+            "value": "esp32video"
+          },
+          {
+            "id": "password",
+            "name": "Password",
+            "type": "data",
+            "dataType": "string",
+            "value": "testESP32"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "outTrigger",
+            "name": "Done",
+            "type": "trigger"
+          },
+          {
+            "id": "connected",
+            "name": "Connected",
+            "type": "data",
+            "dataType": "boolean"
+          },
+          {
+            "id": "ip",
+            "name": "IP",
+            "type": "data",
+            "dataType": "string"
+          },
+          {
+            "id": "rssi",
+            "name": "RSSI",
+            "type": "data",
+            "dataType": "number"
+          }
+        ],
+        "config": {
+          "security": "wpa2",
+          "connected": false,
+          "ip": "",
+          "rssi": 0
+        },
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "wifi_ble_signal_monitor_4",
+      "type": "mathNode",
+      "position": {
+        "x": 1280,
+        "y": 80
+      },
+      "data": {
+        "label": "Formula",
+        "type": "mathNode",
+        "inputs": [
+          {
+            "id": "a",
+            "name": "A",
+            "type": "data",
+            "dataType": "any",
+            "value": 1
+          },
+          {
+            "id": "b",
+            "name": "B",
+            "type": "data",
+            "dataType": "any",
+            "value": 1
+          },
+          {
+            "id": "enabled",
+            "name": "Enabled",
+            "type": "data",
+            "dataType": "boolean",
+            "value": true
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Result",
+            "type": "data",
+            "dataType": "any"
+          }
+        ],
+        "config": {
+          "expression": "a + 100",
+          "dynamicInputs": true
+        },
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "wifi_ble_signal_monitor_5",
+      "type": "gaugeNode",
+      "position": {
+        "x": 1580,
+        "y": 80
+      },
+      "data": {
+        "label": "Gauge",
+        "type": "gaugeNode",
+        "inputs": [
+          {
+            "id": "value",
+            "name": "Value",
+            "type": "data",
+            "dataType": "number",
+            "value": 0
+          }
+        ],
+        "outputs": [
+          {
+            "id": "percent",
+            "name": "Percent",
+            "type": "data",
+            "dataType": "number"
+          }
+        ],
+        "config": {
+          "min": 0,
+          "max": 100
+        },
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "wifi_ble_signal_monitor_6",
+      "type": "betweenNode",
+      "position": {
+        "x": 1280,
+        "y": 270
+      },
+      "data": {
+        "label": "Between",
+        "type": "betweenNode",
+        "inputs": [
+          {
+            "id": "value",
+            "name": "Value",
+            "type": "data",
+            "dataType": "number",
+            "value": 0
+          },
+          {
+            "id": "min",
+            "name": "Min",
+            "type": "data",
+            "dataType": "number",
+            "value": -70
+          },
+          {
+            "id": "max",
+            "name": "Max",
+            "type": "data",
+            "dataType": "number",
+            "value": 0
+          },
+          {
+            "id": "enabled",
+            "name": "Enabled",
+            "type": "data",
+            "dataType": "boolean",
+            "value": true
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "In Range",
+            "type": "data",
+            "dataType": "boolean"
+          }
+        ],
+        "config": {
+          "inclusive": true
+        },
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "wifi_ble_signal_monitor_7",
+      "type": "ifElseTrigger",
+      "position": {
+        "x": 1580,
+        "y": 270
+      },
+      "data": {
+        "label": "If / Else Trigger",
+        "type": "ifElseTrigger",
+        "inputs": [
+          {
+            "id": "inTrigger",
+            "name": "Check",
+            "type": "trigger"
+          },
+          {
+            "id": "condition",
+            "name": "Condition",
+            "type": "data",
+            "dataType": "any",
+            "value": "true"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "onTrue",
+            "name": "If",
+            "type": "trigger"
+          },
+          {
+            "id": "onFalse",
+            "name": "Else",
+            "type": "trigger"
+          }
+        ],
+        "config": {},
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "wifi_ble_signal_monitor_8",
+      "type": "templateNode",
+      "position": {
+        "x": 1280,
+        "y": 460
+      },
+      "data": {
+        "label": "Text Template",
+        "type": "templateNode",
+        "inputs": [
+          {
+            "id": "a",
+            "name": "A",
+            "type": "data",
+            "dataType": "any",
+            "value": ""
+          },
+          {
+            "id": "b",
+            "name": "B",
+            "type": "data",
+            "dataType": "any",
+            "value": ""
+          },
+          {
+            "id": "enabled",
+            "name": "Enabled",
+            "type": "data",
+            "dataType": "boolean",
+            "value": true
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Out",
+            "type": "data",
+            "dataType": "string"
+          }
+        ],
+        "config": {
+          "template": "signal OK — RSSI {a} dBm, {b} BLE devices",
+          "dynamicInputs": true
+        },
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "wifi_ble_signal_monitor_9",
+      "type": "loggerNode",
+      "position": {
+        "x": 1880,
+        "y": 80
+      },
+      "data": {
+        "label": "Console Logger",
+        "type": "loggerNode",
+        "inputs": [
+          {
+            "id": "inTrigger",
+            "name": "Log",
+            "type": "trigger"
+          },
+          {
+            "id": "value",
+            "name": "Value",
+            "type": "data",
+            "dataType": "any",
+            "value": "log me"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "outTrigger",
+            "name": "Out",
+            "type": "trigger"
+          }
+        ],
+        "config": {
+          "logs": []
+        },
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "wifi_ble_signal_monitor_10",
+      "type": "counterNode",
+      "position": {
+        "x": 1880,
+        "y": 270
+      },
+      "data": {
+        "label": "Counter",
+        "type": "counterNode",
+        "inputs": [
+          {
+            "id": "incTrigger",
+            "name": "Inc",
+            "type": "trigger"
+          },
+          {
+            "id": "decTrigger",
+            "name": "Dec",
+            "type": "trigger"
+          },
+          {
+            "id": "resetTrigger",
+            "name": "Reset",
+            "type": "trigger"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "count",
+            "name": "Count",
+            "type": "data",
+            "dataType": "number"
+          }
+        ],
+        "config": {
+          "count": 0
+        },
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "wifi_ble_signal_monitor_11",
+      "type": "loggerNode",
+      "position": {
+        "x": 1880,
+        "y": 460
+      },
+      "data": {
+        "label": "Console Logger",
+        "type": "loggerNode",
+        "inputs": [
+          {
+            "id": "inTrigger",
+            "name": "Log",
+            "type": "trigger"
+          },
+          {
+            "id": "value",
+            "name": "Value",
+            "type": "data",
+            "dataType": "any",
+            "value": "WEAK SIGNAL — move closer or check antenna"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "outTrigger",
+            "name": "Out",
+            "type": "trigger"
+          }
+        ],
+        "config": {
+          "logs": []
+        },
+        "executionState": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "wifi_ble_signal_monitor_0-wifi_ble_signal_monitor_1-inTrigger",
+      "source": "wifi_ble_signal_monitor_0",
+      "sourceHandle": "triggerOut",
+      "target": "wifi_ble_signal_monitor_1",
+      "targetHandle": "inTrigger"
+    },
+    {
+      "id": "wifi_ble_signal_monitor_1-wifi_ble_signal_monitor_2-inTrigger",
+      "source": "wifi_ble_signal_monitor_1",
+      "sourceHandle": "outTrigger",
+      "target": "wifi_ble_signal_monitor_2",
+      "targetHandle": "inTrigger"
+    },
+    {
+      "id": "wifi_ble_signal_monitor_2-wifi_ble_signal_monitor_3-inTrigger",
+      "source": "wifi_ble_signal_monitor_2",
+      "sourceHandle": "outTrigger",
+      "target": "wifi_ble_signal_monitor_3",
+      "targetHandle": "inTrigger"
+    },
+    {
+      "id": "wifi_ble_signal_monitor_3-wifi_ble_signal_monitor_7-inTrigger",
+      "source": "wifi_ble_signal_monitor_3",
+      "sourceHandle": "outTrigger",
+      "target": "wifi_ble_signal_monitor_7",
+      "targetHandle": "inTrigger"
+    },
+    {
+      "id": "wifi_ble_signal_monitor_3-wifi_ble_signal_monitor_4-a",
+      "source": "wifi_ble_signal_monitor_3",
+      "sourceHandle": "rssi",
+      "target": "wifi_ble_signal_monitor_4",
+      "targetHandle": "a"
+    },
+    {
+      "id": "wifi_ble_signal_monitor_4-wifi_ble_signal_monitor_5-value",
+      "source": "wifi_ble_signal_monitor_4",
+      "sourceHandle": "out",
+      "target": "wifi_ble_signal_monitor_5",
+      "targetHandle": "value"
+    },
+    {
+      "id": "wifi_ble_signal_monitor_3-wifi_ble_signal_monitor_6-value",
+      "source": "wifi_ble_signal_monitor_3",
+      "sourceHandle": "rssi",
+      "target": "wifi_ble_signal_monitor_6",
+      "targetHandle": "value"
+    },
+    {
+      "id": "wifi_ble_signal_monitor_6-wifi_ble_signal_monitor_7-condition",
+      "source": "wifi_ble_signal_monitor_6",
+      "sourceHandle": "out",
+      "target": "wifi_ble_signal_monitor_7",
+      "targetHandle": "condition"
+    },
+    {
+      "id": "wifi_ble_signal_monitor_3-wifi_ble_signal_monitor_8-a",
+      "source": "wifi_ble_signal_monitor_3",
+      "sourceHandle": "rssi",
+      "target": "wifi_ble_signal_monitor_8",
+      "targetHandle": "a"
+    },
+    {
+      "id": "wifi_ble_signal_monitor_2-wifi_ble_signal_monitor_8-b",
+      "source": "wifi_ble_signal_monitor_2",
+      "sourceHandle": "count",
+      "target": "wifi_ble_signal_monitor_8",
+      "targetHandle": "b"
+    },
+    {
+      "id": "wifi_ble_signal_monitor_8-wifi_ble_signal_monitor_9-value",
+      "source": "wifi_ble_signal_monitor_8",
+      "sourceHandle": "out",
+      "target": "wifi_ble_signal_monitor_9",
+      "targetHandle": "value"
+    },
+    {
+      "id": "wifi_ble_signal_monitor_7-wifi_ble_signal_monitor_9-inTrigger",
+      "source": "wifi_ble_signal_monitor_7",
+      "sourceHandle": "onTrue",
+      "target": "wifi_ble_signal_monitor_9",
+      "targetHandle": "inTrigger"
+    },
+    {
+      "id": "wifi_ble_signal_monitor_7-wifi_ble_signal_monitor_10-incTrigger",
+      "source": "wifi_ble_signal_monitor_7",
+      "sourceHandle": "onFalse",
+      "target": "wifi_ble_signal_monitor_10",
+      "targetHandle": "incTrigger"
+    },
+    {
+      "id": "wifi_ble_signal_monitor_7-wifi_ble_signal_monitor_11-inTrigger",
+      "source": "wifi_ble_signal_monitor_7",
+      "sourceHandle": "onFalse",
+      "target": "wifi_ble_signal_monitor_11",
+      "targetHandle": "inTrigger"
+    }
+  ]
+}

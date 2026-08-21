@@ -1,0 +1,306 @@
+{
+  "version": 1,
+  "name": "Digit Recognizer (mini network)",
+  "description": "TensorFlow-style image classifier built from the visual AI Model nodes: upload a photo of a digit or letter into the 8x8 Image Input Grid, watch it flow through two Dense Layers (16 relu -> 10 sigmoid), and the Output Layer names the winning class index. Click the grid node to load different digit images and compare winners.",
+  "nodes": [
+    {
+      "id": "digit_recognizer_0",
+      "type": "imageInputGrid",
+      "position": {
+        "x": 80,
+        "y": 80
+      },
+      "data": {
+        "label": "Image Input Grid",
+        "type": "imageInputGrid",
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "values",
+            "name": "Values",
+            "type": "data",
+            "dataType": "any"
+          }
+        ],
+        "config": {
+          "gridSize": 8,
+          "cellValues": [],
+          "cellColors": [],
+          "imageSrc": "",
+          "imageName": ""
+        },
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "digit_recognizer_1",
+      "type": "denseLayer",
+      "position": {
+        "x": 380,
+        "y": 80
+      },
+      "data": {
+        "label": "Dense Layer",
+        "type": "denseLayer",
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Values In",
+            "type": "data",
+            "dataType": "any",
+            "value": []
+          },
+          {
+            "id": "enabled",
+            "name": "Enabled",
+            "type": "data",
+            "dataType": "boolean",
+            "value": true
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Activations",
+            "type": "data",
+            "dataType": "any"
+          }
+        ],
+        "config": {
+          "neurons": 16,
+          "activation": "relu",
+          "seed": 42
+        },
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "digit_recognizer_2",
+      "type": "denseLayer",
+      "position": {
+        "x": 680,
+        "y": 80
+      },
+      "data": {
+        "label": "Dense Layer",
+        "type": "denseLayer",
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Values In",
+            "type": "data",
+            "dataType": "any",
+            "value": []
+          },
+          {
+            "id": "enabled",
+            "name": "Enabled",
+            "type": "data",
+            "dataType": "boolean",
+            "value": true
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Activations",
+            "type": "data",
+            "dataType": "any"
+          }
+        ],
+        "config": {
+          "neurons": 10,
+          "activation": "sigmoid",
+          "seed": 7
+        },
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "digit_recognizer_3",
+      "type": "outputLayerNode",
+      "position": {
+        "x": 980,
+        "y": 80
+      },
+      "data": {
+        "label": "Output Layer",
+        "type": "outputLayerNode",
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Activations",
+            "type": "data",
+            "dataType": "any",
+            "value": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Values",
+            "type": "data",
+            "dataType": "any"
+          },
+          {
+            "id": "winner",
+            "name": "Winner",
+            "type": "data",
+            "dataType": "number"
+          }
+        ],
+        "config": {},
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "digit_recognizer_4",
+      "type": "templateNode",
+      "position": {
+        "x": 1280,
+        "y": 80
+      },
+      "data": {
+        "label": "Text Template",
+        "type": "templateNode",
+        "inputs": [
+          {
+            "id": "a",
+            "name": "A",
+            "type": "data",
+            "dataType": "any",
+            "value": ""
+          },
+          {
+            "id": "b",
+            "name": "B",
+            "type": "data",
+            "dataType": "any",
+            "value": ""
+          },
+          {
+            "id": "enabled",
+            "name": "Enabled",
+            "type": "data",
+            "dataType": "boolean",
+            "value": true
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Out",
+            "type": "data",
+            "dataType": "string"
+          }
+        ],
+        "config": {
+          "template": "recognized class: {a}",
+          "dynamicInputs": true
+        },
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "digit_recognizer_5",
+      "type": "triggerInput",
+      "position": {
+        "x": 80,
+        "y": 270
+      },
+      "data": {
+        "label": "Manual Trigger",
+        "type": "triggerInput",
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "triggerOut",
+            "name": "Trigger",
+            "type": "trigger"
+          }
+        ],
+        "config": {},
+        "executionState": "idle"
+      }
+    },
+    {
+      "id": "digit_recognizer_6",
+      "type": "textOutputNode",
+      "position": {
+        "x": 1580,
+        "y": 80
+      },
+      "data": {
+        "label": "Text Output",
+        "type": "textOutputNode",
+        "inputs": [
+          {
+            "id": "inTrigger",
+            "name": "In",
+            "type": "trigger"
+          },
+          {
+            "id": "value",
+            "name": "Value",
+            "type": "data",
+            "dataType": "any",
+            "value": ""
+          }
+        ],
+        "outputs": [
+          {
+            "id": "outTrigger",
+            "name": "Out",
+            "type": "trigger"
+          }
+        ],
+        "config": {},
+        "executionState": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "digit_recognizer_0-digit_recognizer_1-in",
+      "source": "digit_recognizer_0",
+      "sourceHandle": "values",
+      "target": "digit_recognizer_1",
+      "targetHandle": "in"
+    },
+    {
+      "id": "digit_recognizer_1-digit_recognizer_2-in",
+      "source": "digit_recognizer_1",
+      "sourceHandle": "out",
+      "target": "digit_recognizer_2",
+      "targetHandle": "in"
+    },
+    {
+      "id": "digit_recognizer_2-digit_recognizer_3-in",
+      "source": "digit_recognizer_2",
+      "sourceHandle": "out",
+      "target": "digit_recognizer_3",
+      "targetHandle": "in"
+    },
+    {
+      "id": "digit_recognizer_3-digit_recognizer_4-a",
+      "source": "digit_recognizer_3",
+      "sourceHandle": "winner",
+      "target": "digit_recognizer_4",
+      "targetHandle": "a"
+    },
+    {
+      "id": "digit_recognizer_4-digit_recognizer_6-value",
+      "source": "digit_recognizer_4",
+      "sourceHandle": "out",
+      "target": "digit_recognizer_6",
+      "targetHandle": "value"
+    },
+    {
+      "id": "digit_recognizer_5-digit_recognizer_6-inTrigger",
+      "source": "digit_recognizer_5",
+      "sourceHandle": "triggerOut",
+      "target": "digit_recognizer_6",
+      "targetHandle": "inTrigger"
+    }
+  ]
+}

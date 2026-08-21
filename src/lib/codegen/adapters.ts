@@ -167,6 +167,70 @@ function toPhp(js: CodeLine[]): CodeLine[] {
   return [...tag(["<?php", ""]), ...body, ...tag(["", "main_flow();"])];
 }
 
+const RUBY_RULES: AdapterRule[] = [
+  { from: /\basync function (\w+)\(([^)]*)\) \{/g, to: "def $1($2)" },
+  // runtime helpers are emitted as plain (non-async) functions
+  { from: /^(\s*)function (\w+)\(([^)]*)\) \{$/g, to: "$1def $2($3)" },
+  { from: /\bawait sleep\(([^;]+)\);/g, to: "sleep(($1) / 1000.0)" },
+  { from: /\bawait /g, to: "" },
+  { from: /\bconsole\.log\(([^;]*)\);/g, to: "puts($1)" },
+  // must run BEFORE the `let` rule strips the for-header's declaration
+  { from: /^(\s*)for \(let (\w+) = 0; \2 < (.*); \2\+\+\) \{$/g, to: "$1(0...($3)).each do |$2|" },
+  { from: /\blet (\w+) = /g, to: "$1 = " },
+  { from: /\bconst (\w+) = /g, to: "$1 = " },
+  { from: /\} else \{/g, to: "else" },
+  { from: /^(\s*)\}(\s*)$/g, to: "$1end$2" },
+  // Ruby keeps parens on if/while conditions, so ifLine/whileLine only lose
+  // the trailing brace.
+  { from: /^(\s*)if \((.*)\) \{$/g, to: "$1if ($2)" },
+  { from: /^(\s*)while \((.*)\) \{$/g, to: "$1while ($2)" },
+  { from: /!==/g, to: "!=" },
+  { from: /===/g, to: "==" },
+  { from: /\bNumber\(/g, to: "Float(" },
+  { from: /\bBoolean\(/g, to: "!!(" },
+  { from: /\bDate\.now\(\)/g, to: "(Time.now.to_f * 1000).to_i" },
+  { from: /\bnull\b/g, to: "nil" },
+  { from: /;$/g, to: "" },
+];
+
+// Math.* and JS string/array idioms don't map line-locally — honest TODOs.
+const RUBY_BAILS = [/\.(split|includes|toUpperCase|toLowerCase|trim|indexOf)\(/, /=>/, /\bfetch\(/, /JSON\./, /\bMath\./, /\[\.\.\./, /`/];
+
+function toRuby(js: CodeLine[]): CodeLine[] {
+  const body = adaptBody(js, RUBY_RULES, RUBY_BAILS, "port to Ruby by hand", (l) =>
+    l.replace(/^def main\(\)$/g, "def main_flow"),
+  );
+  return [...tag(["# Ruby build of the flow", ""]), ...body, ...tag(["", "main_flow"])];
+}
+
+// MicroPython derives from the PYTHON emission (not JS) — the syntax is
+// already identical; only the runtime differs (time.sleep_ms/ticks_ms, no
+// strftime on most ports). Highest-fidelity derived target as a result.
+const MICROPYTHON_RULES: AdapterRule[] = [
+  // urllib.request does not exist on MicroPython (Ollama nodes would need
+  // urequests — those flows are desktop-only anyway)
+  { from: /^import math, random, re, time, json, urllib\.request$/g, to: "import math, random, re, time, json" },
+  { from: /\burllib\.request\b/g, to: "urequests  # TODO(port to MicroPython by hand): urllib" },
+  { from: /time\.sleep\(\((.*)\) \/ 1000\.0\)/g, to: "time.sleep_ms(int($1))" },
+  { from: /\bint\(time\.time\(\) \* 1000\)/g, to: "time.ticks_ms()" },
+  { from: /time\.strftime\("%H:%M:%S"\)/g, to: '("%02d:%02d:%02d" % time.localtime()[3:6])' },
+];
+
+const MICROPYTHON_HEADER = [
+  "# MicroPython build — copy to the board as main.py (mpremote / Thonny),",
+  "# or flash it from the Device Lab.",
+  "",
+];
+
+export function adaptFromPython(py: CodeLine[]): CodeLine[] {
+  const body = py.map((l) => {
+    let text = l.text;
+    for (const rule of MICROPYTHON_RULES) text = text.replace(rule.from, rule.to);
+    return { ...l, text };
+  });
+  return [...tag(MICROPYTHON_HEADER), ...body];
+}
+
 export function adaptFromJs(js: CodeLine[], target: string): CodeLine[] {
   switch (target) {
     case "c":
@@ -179,6 +243,8 @@ export function adaptFromJs(js: CodeLine[], target: string): CodeLine[] {
       return toRust(js);
     case "php":
       return toPhp(js);
+    case "ruby":
+      return toRuby(js);
     default:
       return js;
   }
